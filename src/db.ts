@@ -88,6 +88,15 @@ function migrate(db: DatabaseSync): void {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS projects (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      git_repo_path TEXT,
+      github_repo_url TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 
   // Add run_id column to backlog table for backwards compat
@@ -151,6 +160,15 @@ export interface BacklogEntry {
   status: string;
   priority: number;
   run_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectEntry {
+  id: string;
+  name: string;
+  git_repo_path: string | null;
+  github_repo_url: string | null;
   created_at: string;
   updated_at: string;
 }
