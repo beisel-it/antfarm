@@ -90,6 +90,13 @@ function migrate(db: DatabaseSync): void {
     );
   `);
 
+  // Add run_id column to backlog table for backwards compat
+  const backlogCols = db.prepare("PRAGMA table_info(backlog)").all() as Array<{ name: string }>;
+  const backlogColNames = new Set(backlogCols.map((c) => c.name));
+  if (!backlogColNames.has("run_id")) {
+    db.exec("ALTER TABLE backlog ADD COLUMN run_id TEXT");
+  }
+
   // Add columns to steps table for backwards compat
   const cols = db.prepare("PRAGMA table_info(steps)").all() as Array<{ name: string }>;
   const colNames = new Set(cols.map((c) => c.name));
@@ -143,6 +150,7 @@ export interface BacklogEntry {
   description: string | null;
   status: string;
   priority: number;
+  run_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -150,6 +158,6 @@ export interface BacklogEntry {
 export function getBacklog(): BacklogEntry[] {
   const db = getDb();
   return db.prepare(
-    "SELECT id, title, description, status, priority, created_at, updated_at FROM backlog ORDER BY priority ASC, created_at ASC"
+    "SELECT id, title, description, status, priority, run_id, created_at, updated_at FROM backlog ORDER BY priority ASC, created_at ASC"
   ).all() as unknown as BacklogEntry[];
 }

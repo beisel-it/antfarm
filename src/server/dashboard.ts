@@ -12,6 +12,7 @@ import {
   getBacklogEntry,
 } from "../backlog/index.js";
 import YAML from "yaml";
+import { runWorkflow } from "../installer/run.js";
 
 import type { RunInfo, StepInfo } from "../installer/status.js";
 import { getRunEvents } from "../installer/events.js";
@@ -165,8 +166,36 @@ export function startDashboard(port = 3333): http.Server {
       const id = backlogDispatchMatch[1];
       const entry = findBacklogEntryById(id);
       if (!entry) return json(res, { error: "not found" }, 404);
-      const updated = updateBacklogEntry(entry.id, { status: "dispatched" });
-      return json(res, updated);
+      return readBody(req, async (body) => {
+        try {
+          let workflowId: string | undefined;
+          try {
+            const data = body ? JSON.parse(body) : {};
+            workflowId = data.workflowId;
+          } catch {
+            // ignore parse errors — body is optional
+          }
+
+          // Default to first installed workflow if none specified
+          if (!workflowId) {
+            const workflows = loadWorkflows();
+            if (workflows.length === 0) {
+              return json(res, { error: "no workflows installed" }, 400);
+            }
+            workflowId = workflows[0].id;
+          }
+
+          const taskTitle = entry.title + (entry.description ? "\n\n" + entry.description : "");
+          const run = await runWorkflow({ workflowId, taskTitle });
+
+          updateBacklogEntry(entry.id, { status: "dispatched", run_id: run.id });
+
+          return json(res, { ok: true, runId: run.id, runNumber: run.runNumber });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          return json(res, { error: message }, 400);
+        }
+      });
     }
 
     const backlogIdMatch = p.match(/^\/api\/backlog\/([^/]+)$/);

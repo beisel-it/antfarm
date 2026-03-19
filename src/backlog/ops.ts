@@ -21,7 +21,7 @@ export function addBacklogEntry(fields: {
 
 export function updateBacklogEntry(
   id: string,
-  updates: Partial<Pick<BacklogEntry, "title" | "description" | "status" | "priority">>
+  updates: Partial<Pick<BacklogEntry, "title" | "description" | "status" | "priority" | "run_id">>
 ): BacklogEntry | null {
   const db = getDb();
   const existing = getBacklogEntry(id);
@@ -47,6 +47,10 @@ export function updateBacklogEntry(
     setClauses.push("priority = ?");
     values.push(updates.priority);
   }
+  if (updates.run_id !== undefined) {
+    setClauses.push("run_id = ?");
+    values.push(updates.run_id);
+  }
 
   if (setClauses.length === 0) return existing;
 
@@ -69,7 +73,7 @@ export function listBacklogEntries(): BacklogEntry[] {
   const db = getDb();
   return db
     .prepare(
-      "SELECT id, title, description, status, priority, created_at, updated_at FROM backlog ORDER BY priority DESC, created_at ASC"
+      "SELECT id, title, description, status, priority, run_id, created_at, updated_at FROM backlog ORDER BY priority DESC, created_at ASC"
     )
     .all() as unknown as BacklogEntry[];
 }
@@ -78,7 +82,7 @@ export function getBacklogEntry(id: string): BacklogEntry | null {
   const db = getDb();
   const row = db
     .prepare(
-      "SELECT id, title, description, status, priority, created_at, updated_at FROM backlog WHERE id = ?"
+      "SELECT id, title, description, status, priority, run_id, created_at, updated_at FROM backlog WHERE id = ?"
     )
     .get(id) as unknown as BacklogEntry | undefined;
   return row ?? null;

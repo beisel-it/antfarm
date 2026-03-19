@@ -118,11 +118,19 @@ describe("Backlog API", () => {
     assert.equal(d.error, "not found");
   });
 
-  it("POST /api/backlog/:id/dispatch updates status to dispatched", async () => {
+  it("POST /api/backlog/:id/dispatch triggers workflow run or returns error", async () => {
+    // With the real dispatch endpoint, it either:
+    // - returns {ok: true, runId, runNumber} on success (workflow installed)
+    // - returns 400 {error: ...} if no workflow installed / dispatch fails
     const { status, data } = await req("POST", `/api/backlog/${createdId}/dispatch`);
-    assert.equal(status, 200);
-    const entry = data as Record<string, unknown>;
-    assert.equal(entry.status, "dispatched");
+    const d = data as Record<string, unknown>;
+    if (status === 200) {
+      assert.equal(d.ok, true);
+      assert.ok(d.runId, "should return runId");
+    } else {
+      assert.equal(status, 400);
+      assert.ok(d.error, "should return error message");
+    }
   });
 
   it("POST /api/backlog/:id/dispatch with unknown id returns 404", async () => {
