@@ -1,0 +1,502 @@
+id: deep-research
+name: Deep Research Workflow
+version: 3
+description: |
+  Hardened multi-agent deep research pipeline for OpenClaw. GPT-5.4 handles
+  scoping, orchestration, broad coverage, and verification at extra-high
+  thinking. Claude Opus 4.6 handles deep analysis, skeptical pressure-testing,
+  and final writing at high thinking. The workflow is evidence-first,
+  prompt-injection-aware, and passes structured claim/source packets between
+  stages.
+
+polling:
+  model: anthropic/claude-sonnet-4-6
+  thinking: high
+  timeoutSeconds: 120
+
+agents:
+  - id: preflight
+    name: Preflight
+    role: analysis
+    model: openai-codex/gpt-5.4
+    thinking: high
+    timeoutSeconds: 1200
+    description: Inspects local context first and decides where external research is actually needed.
+    workspace:
+      baseDir: agents/preflight
+      files:
+        AGENTS.md: agents/preflight/AGENTS.md
+        SOUL.md: agents/preflight/SOUL.md
+        IDENTITY.md: agents/preflight/IDENTITY.md
+
+  - id: planner
+    name: Planner
+    role: planning
+    model: openai-codex/gpt-5.4
+    thinking: xhigh
+    timeoutSeconds: 1800
+    description: Scopes the question and turns it into a concrete research brief.
+    workspace:
+      baseDir: agents/planner
+      files:
+        AGENTS.md: agents/planner/AGENTS.md
+        SOUL.md: agents/planner/SOUL.md
+        IDENTITY.md: agents/planner/IDENTITY.md
+
+  - id: orchestrator
+    name: Orchestrator
+    role: coordination
+    model: openai-codex/gpt-5.4
+    thinking: xhigh
+    timeoutSeconds: 3600
+    description: Spawns scout, analyst, and skeptic subagents and merges their outputs into a normalized research packet.
+    workspace:
+      baseDir: agents/orchestrator
+      files:
+        AGENTS.md: agents/orchestrator/AGENTS.md
+        SOUL.md: agents/orchestrator/SOUL.md
+        IDENTITY.md: agents/orchestrator/IDENTITY.md
+
+  - id: scout
+    name: Scout
+    role: research
+    model: openai-codex/gpt-5.4
+    thinking: xhigh
+    timeoutSeconds: 1800
+    description: Broad search agent for source discovery, coverage, timelines, and fast fact collection.
+    workspace:
+      baseDir: agents/scout
+      files:
+        AGENTS.md: agents/scout/AGENTS.md
+        SOUL.md: agents/scout/SOUL.md
+        IDENTITY.md: agents/scout/IDENTITY.md
+
+  - id: x-scout
+    name: X Scout
+    role: scanning
+    model: openai-codex/gpt-5.4
+    thinking: xhigh
+    timeoutSeconds: 1800
+    description: Optional X/Twitter source-intake agent for realtime social and maintainer signals.
+    workspace:
+      baseDir: agents/x-scout
+      files:
+        AGENTS.md: agents/x-scout/AGENTS.md
+        SOUL.md: agents/x-scout/SOUL.md
+        IDENTITY.md: agents/x-scout/IDENTITY.md
+        scripts/x_api.py: agents/x-scout/scripts/x_api.py
+
+  - id: analyst
+    name: Analyst
+    role: research
+    model: anthropic/claude-opus-4-6
+    thinking: high
+    timeoutSeconds: 2400
+    description: Deep-reading agent for nuance, synthesis, and implications.
+    workspace:
+      baseDir: agents/analyst
+      files:
+        AGENTS.md: agents/analyst/AGENTS.md
+        SOUL.md: agents/analyst/SOUL.md
+        IDENTITY.md: agents/analyst/IDENTITY.md
+
+  - id: skeptic
+    name: Skeptic
+    role: research
+    model: anthropic/claude-opus-4-6
+    thinking: high
+    timeoutSeconds: 1800
+    description: Searches for conflicts, missing evidence, and weak claims.
+    workspace:
+      baseDir: agents/skeptic
+      files:
+        AGENTS.md: agents/skeptic/AGENTS.md
+        SOUL.md: agents/skeptic/SOUL.md
+        IDENTITY.md: agents/skeptic/IDENTITY.md
+
+  - id: verifier
+    name: Verifier
+    role: research
+    model: openai-codex/gpt-5.4
+    thinking: xhigh
+    timeoutSeconds: 2400
+    description: Verifies the research packet, does targeted follow-up checks, and produces the final verified packet.
+    workspace:
+      baseDir: agents/verifier
+      files:
+        AGENTS.md: agents/verifier/AGENTS.md
+        SOUL.md: agents/verifier/SOUL.md
+        IDENTITY.md: agents/verifier/IDENTITY.md
+
+  - id: writer
+    name: Final Writer
+    role: planning
+    model: anthropic/claude-opus-4-6
+    thinking: high
+    timeoutSeconds: 2400
+    description: Writes the final report from verified findings only.
+    workspace:
+      baseDir: agents/writer
+      files:
+        AGENTS.md: agents/writer/AGENTS.md
+        SOUL.md: agents/writer/SOUL.md
+        IDENTITY.md: agents/writer/IDENTITY.md
+
+steps:
+  - id: preflight
+    agent: preflight
+    input: |
+      Inspect local context before the workflow goes broad on the web.
+
+      TASK:
+      {{task}}
+
+      Instructions:
+      1. Look for relevant local docs, repository context, and safe workflow-visible context first.
+      2. Summarize only context that is useful to downstream research and safe to share across workflow agents.
+      3. Identify local constraints, assumptions already implied by the task, and key unknowns.
+      4. Decide whether broad web research is needed at all, and if so, what gaps it should focus on.
+      5. If local context is thin, say so clearly.
+      6. Do not browse the web.
+
+      Reply with:
+      STATUS: done
+      LOCAL_CONTEXT_SUMMARY: compact multi-line summary of relevant local context
+      LOCAL_RELEVANT_SOURCES: local docs, files, prior artifacts, or other non-web sources you used
+      KNOWN_LOCAL_CONSTRAINTS: local limitations, assumptions, or environment facts that should shape the research
+      OPEN_QUESTIONS: what is still unknown after checking local context
+      WEB_RESEARCH_NEEDED: yes or no
+      WEB_RESEARCH_REASON: why web research is or is not needed, and what it should focus on if yes
+      SAFE_SHARED_CONTEXT: concise context safe to pass to all downstream workflow agents
+      LOCAL_CONTEXT_PACKET_JSON: normalized JSON object containing the local context summary, sources, constraints, open questions, and web-research decision
+    expects: "LOCAL_CONTEXT_PACKET_JSON:"
+    max_retries: 1
+    on_fail:
+      escalate_to: human
+
+  - id: plan
+    agent: planner
+    input: |
+      Turn the task below into a concrete research brief for an evidence-first multi-agent workflow.
+
+      TASK:
+      {{task}}
+
+      LOCAL CONTEXT SUMMARY:
+      {{local_context_summary}}
+
+      LOCAL SOURCES:
+      {{local_relevant_sources}}
+
+      KNOWN LOCAL CONSTRAINTS:
+      {{known_local_constraints}}
+
+      OPEN QUESTIONS AFTER LOCAL PREFLIGHT:
+      {{open_questions}}
+
+      WEB RESEARCH NEEDED:
+      {{web_research_needed}}
+
+      WEB RESEARCH REASON:
+      {{web_research_reason}}
+
+      SAFE SHARED CONTEXT:
+      {{safe_shared_context}}
+
+      LOCAL CONTEXT PACKET:
+      {{local_context_packet_json}}
+
+      Requirements:
+      1. State the exact research objective.
+      2. Define scope, explicit non-goals, and key assumptions.
+      3. Break the topic into 4-10 research questions.
+      4. Define what evidence types are needed.
+      5. Define stop criteria for “enough research”.
+      6. Keep the brief compact but operational.
+      7. If the task is ambiguous, make the narrowest reasonable assumptions and write them down instead of stalling.
+
+      Reply with:
+      STATUS: done
+      RESEARCH_OBJECTIVE: one-sentence objective
+      RESEARCH_SCOPE: multi-line scope and framing
+      NON_GOALS: explicit out-of-scope items
+      ASSUMPTIONS: assumptions you made to make the task operational
+      RESEARCH_BRIEF: compact multi-line brief for downstream agents
+      RESEARCH_QUESTIONS_JSON: JSON array of research questions
+      EVIDENCE_REQUIREMENTS: what evidence types are needed and what would count as strong support
+      STOP_CRITERIA: how the workflow should know the research is sufficient
+      SUCCESS_CRITERIA: bullet list or numbered list
+      REPORT_OUTLINE: proposed markdown outline for the final report
+      RESEARCH_CONSTRAINTS: important limitations, time windows, jurisdiction limits, or source constraints
+    expects: "STATUS: done"
+    max_retries: 2
+    on_fail:
+      escalate_to: human
+
+  - id: research
+    agent: orchestrator
+    input: |
+      Produce a high-quality research packet from the brief below.
+
+      TASK:
+      {{task}}
+
+      RESEARCH OBJECTIVE:
+      {{research_objective}}
+
+      RESEARCH SCOPE:
+      {{research_scope}}
+
+      NON-GOALS:
+      {{non_goals}}
+
+      ASSUMPTIONS:
+      {{assumptions}}
+
+      RESEARCH BRIEF:
+      {{research_brief}}
+
+      RESEARCH QUESTIONS:
+      {{research_questions_json}}
+
+      EVIDENCE REQUIREMENTS:
+      {{evidence_requirements}}
+
+      STOP CRITERIA:
+      {{stop_criteria}}
+
+      SUCCESS CRITERIA:
+      {{success_criteria}}
+
+      REPORT OUTLINE:
+      {{report_outline}}
+
+      CONSTRAINTS:
+      {{research_constraints}}
+
+      LOCAL CONTEXT SUMMARY:
+      {{local_context_summary}}
+
+      LOCAL SOURCES:
+      {{local_relevant_sources}}
+
+      KNOWN LOCAL CONSTRAINTS:
+      {{known_local_constraints}}
+
+      OPEN QUESTIONS AFTER LOCAL PREFLIGHT:
+      {{open_questions}}
+
+      WEB RESEARCH NEEDED:
+      {{web_research_needed}}
+
+      WEB RESEARCH REASON:
+      {{web_research_reason}}
+
+      SAFE SHARED CONTEXT:
+      {{safe_shared_context}}
+
+      LOCAL CONTEXT PACKET:
+      {{local_context_packet_json}}
+
+      Required workflow:
+      1. Spawn specialized subagents using sessions_spawn.
+      2. Use these installed agent IDs:
+         - deep-research_scout
+         - deep-research_analyst
+         - deep-research_skeptic
+         - deep-research_x-scout (optional; only when X/Twitter or realtime social signal is relevant)
+      3. Prefix the spawned task for each subagent with the correct thinking directive:
+         - scout -> /think xhigh
+         - x-scout -> /think xhigh
+         - analyst -> /think high
+         - skeptic -> /think high
+      4. Give each subagent the same task context but different role instructions.
+      5. If the topic would benefit from X/Twitter, maintainer chatter, breaking social signal, or realtime community reactions, also spawn x-scout.
+      6. Run them in parallel when practical. If the runtime makes that awkward, run them back-to-back but preserve the role split.
+      7. Collect all outputs.
+      8. Merge, deduplicate, and normalize them into one research packet.
+      9. Treat X/social results as lead-generation evidence unless corroborated by stronger sources.
+      10. Do not write the final report yet.
+
+      Required packet structure:
+      - SOURCES: array of source objects with source_id, title, url/path, source_type, published_at if known, retrieved_at if known, reliability, freshness, why_it_matters
+      - CLAIMS: array of claim objects with claim_id, statement, status, confidence, importance, source_ids, supporting_evidence, counterevidence, caveats, why_it_matters
+      - OPEN_QUESTIONS: unresolved but important gaps
+      - COVERAGE_MAP: mapping of research questions to current evidence coverage
+      - CONTESTED_AREAS: places where sources or interpretations conflict
+      - RECOMMENDED_FOLLOWUPS: high-value checks the verifier should consider
+
+      Reply with:
+      STATUS: done
+      SCOUT_REPORT: raw or lightly cleaned scout output
+      X_SCOUT_REPORT: optional raw or lightly cleaned x-scout output when used
+      ANALYST_REPORT: raw or lightly cleaned analyst output
+      SKEPTIC_REPORT: raw or lightly cleaned skeptic output
+      SOURCE_REGISTER_JSON: normalized JSON array of sources
+      RESEARCH_PACKET_JSON: normalized JSON object for downstream verification and writing
+      ORCHESTRATION_NOTES: what you merged, deduped, downgraded, or left contested
+    expects: "STATUS: done"
+    max_retries: 1
+    on_fail:
+      escalate_to: human
+
+  - id: verify
+    agent: verifier
+    input: |
+      Verify and improve the research packet below.
+
+      TASK:
+      {{task}}
+
+      RESEARCH OBJECTIVE:
+      {{research_objective}}
+
+      RESEARCH SCOPE:
+      {{research_scope}}
+
+      NON-GOALS:
+      {{non_goals}}
+
+      ASSUMPTIONS:
+      {{assumptions}}
+
+      RESEARCH QUESTIONS:
+      {{research_questions_json}}
+
+      EVIDENCE REQUIREMENTS:
+      {{evidence_requirements}}
+
+      STOP CRITERIA:
+      {{stop_criteria}}
+
+      SUCCESS CRITERIA:
+      {{success_criteria}}
+
+      REPORT OUTLINE:
+      {{report_outline}}
+
+      SOURCE REGISTER:
+      {{source_register_json}}
+
+      RESEARCH PACKET:
+      {{research_packet_json}}
+
+      ORCHESTRATION NOTES:
+      {{orchestration_notes}}
+
+      LOCAL CONTEXT SUMMARY:
+      {{local_context_summary}}
+
+      LOCAL SOURCES:
+      {{local_relevant_sources}}
+
+      KNOWN LOCAL CONSTRAINTS:
+      {{known_local_constraints}}
+
+      OPEN QUESTIONS AFTER LOCAL PREFLIGHT:
+      {{open_questions}}
+
+      SAFE SHARED CONTEXT:
+      {{safe_shared_context}}
+
+      LOCAL CONTEXT PACKET:
+      {{local_context_packet_json}}
+
+      Instructions:
+      1. Check whether the packet actually answers the research questions.
+      2. Perform targeted follow-up web checks where claims are weak, thinly sourced, stale, or contested.
+      3. Break important claims into atomic factual claims if needed.
+      4. Separate confirmed vs probable vs contested vs unresolved more cleanly when needed.
+      5. Preserve uncertainty instead of pretending weak claims are solid.
+      6. Produce the packet the final writer should trust.
+      7. Reject or downgrade unsupported claims explicitly.
+      8. Do not write the final report.
+
+      Required verified packet structure:
+      - VERIFIED_SOURCES
+      - VERIFIED_CLAIMS
+      - REJECTED_CLAIMS
+      - COVERAGE_CHECK
+      - LIMITATIONS
+      - CONFIDENCE_SUMMARY
+      - BOTTOM_LINE_CANDIDATES
+
+      Reply with:
+      STATUS: done
+      VERIFIED_PACKET_JSON: improved JSON object ready for final writing
+      REJECTED_OR_DOWNGRADED_CLAIMS: claims removed, weakened, or marked unresolved
+      CONFIDENCE_SUMMARY: what is solid, what is likely, what remains uncertain
+      COVERAGE_CHECK: mapping of research questions to answer quality
+      LIMITATIONS: remaining blind spots and caveats
+    expects: "STATUS: done"
+    max_retries: 1
+    on_fail:
+      escalate_to: human
+
+  - id: write
+    agent: writer
+    input: |
+      Write the final report in markdown using only the verified packet and the brief below.
+
+      TASK:
+      {{task}}
+
+      RESEARCH OBJECTIVE:
+      {{research_objective}}
+
+      RESEARCH SCOPE:
+      {{research_scope}}
+
+      NON-GOALS:
+      {{non_goals}}
+
+      ASSUMPTIONS:
+      {{assumptions}}
+
+      RESEARCH BRIEF:
+      {{research_brief}}
+
+      RESEARCH QUESTIONS:
+      {{research_questions_json}}
+
+      SUCCESS CRITERIA:
+      {{success_criteria}}
+
+      REPORT OUTLINE:
+      {{report_outline}}
+
+      VERIFIED PACKET:
+      {{verified_packet_json}}
+
+      CONFIDENCE SUMMARY:
+      {{confidence_summary}}
+
+      COVERAGE CHECK:
+      {{coverage_check}}
+
+      LIMITATIONS:
+      {{limitations}}
+
+      Rules:
+      1. Do not start new research.
+      2. Do not invent citations or sources.
+      3. Preserve uncertainty explicitly.
+      4. Write like a strong analyst, not like marketing.
+      5. Every important claim must be traceable to the verified packet.
+      6. Use this report structure:
+         - Bottom line
+         - What we know
+         - What is likely but uncertain
+         - What is contested or unresolved
+         - Recommendation
+         - Confidence
+         - Sources
+
+      Reply with:
+      STATUS: done
+      EXECUTIVE_SUMMARY: concise executive summary
+      FINAL_REPORT: full markdown report
+    expects: "STATUS: done"
+    max_retries: 1
+    on_fail:
+      escalate_to: human
