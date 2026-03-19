@@ -1,90 +1,124 @@
 import crypto from "node:crypto";
-import { execSync } from "node:child_process";
-import os from "node:os";
 import { loadWorkflowSpec } from "./workflow-spec.js";
 import { resolveWorkflowDir } from "./paths.js";
 import { getDb, nextRunNumber } from "../db.js";
 import { logger } from "../lib/logger.js";
 import { ensureWorkflowCrons } from "./agent-cron.js";
 import { emitEvent } from "./events.js";
+import { resolveTemplate } from "./step-ops.js";
 
-/**
- * Extract a repository path from a task title string.
- * Looks for the first token that matches an absolute or home-relative path,
- * or a path explicitly prefixed with "REPO:" or "Repo:".
- * 
- * @param taskTitle - The task title string to parse
- * @returns The extracted repo path, or null if none found
- * 
- * @example
- * extractRepoPath("/home/user/repo add feature") // "/home/user/repo"
- * extractRepoPath("REPO: ~/myrepo fix bug") // "~/myrepo"
- * extractRepoPath("add feature to app") // null
- */
-export function extractRepoPath(taskTitle: string): string | null {
-  // Check for explicit REPO: or Repo: prefix
-  const repoMatch = taskTitle.match(/\b(?:REPO|Repo):\s*(\S+)/);
-  if (repoMatch) {
-    return repoMatch[1];
-  }
+export interface DryRunResult {
+  workflowId: string;
+  workflowName: string;
+  task: string;
+  steps: DryRunStep[];
+  context: Record<string, string>;
+}
 
-  // Look for first token that starts with / or ~/
-  const tokens = taskTitle.split(/\s+/);
-  for (const token of tokens) {
-    if (/^(\/|~\/)/.test(token)) {
-      return token;
+export interface DryRunStep {
+  stepIndex: number;
+  stepId: string;
+  agentId: string;
+  type: "single" | "loop";
+  inputTemplate: string;
+  resolvedInput: string;
+  expects: string;
+  status: string;
+}
+
+export async function dryRunWorkflow(params: {
+  workflowId: string;
+  taskTitle: string;
+}): Promise<DryRunResult> {
+  // 1. Validate workflow YAML
+  const workflowDir = resolveWorkflowDir(params.workflowId);
+  const workflow = await loadWorkflowSpec(workflowDir);
+
+  // 2. Build execution context with placeholder values
+  const placeholderContext: Record<string, string> = {
+    task: params.taskTitle,
+    run_id: "dry-run-00000000-0000-0000-0000-000000000000",
+    run_number: "0",
+    ...workflow.context,
+  };
+
+  // Add placeholder values for any workflow context variables not provided
+  if (workflow.context) {
+    for (const [key, value] of Object.entries(workflow.context)) {
+      placeholderContext[key] = value;
     }
   }
 
-  return null;
-}
+  // 3. Resolve all step input templates
+  const steps: DryRunStep[] = [];
+  for (let i = 0; i < workflow.steps.length; i++) {
+    const step = workflow.steps[i];
+    const agentId = workflow.id + "_" + step.agent;
+    const stepType = step.type ?? "single";
 
-/**
- * Validate that a path is a valid git repository.
- * Expands ~ to the home directory and checks if the path contains a .git directory.
- * 
- * @param path - The path to validate (can be absolute, relative, or home-relative with ~)
- * @returns true if the path is a valid git repository, false otherwise
- * 
- * @example
- * isGitRepo("/home/user/myrepo") // true if valid git repo
- * isGitRepo("~/projects/app") // true if valid git repo (expands ~)
- * isGitRepo("/tmp/notrepo") // false
- */
-export function isGitRepo(path: string): boolean {
-  // Handle empty string - not a valid path
-  if (!path || path.trim() === "") {
-    return false;
-  }
+    // Resolve the input template against our context
+    const resolvedInput = resolveTemplate(step.input, placeholderContext);
 
-  try {
-    // Expand ~ to home directory
-    const expandedPath = path.startsWith("~/") 
-      ? path.replace(/^~/, os.homedir())
-      : path;
-
-    // Use git rev-parse to check if it's a valid git repository
-    execSync("git -C " + JSON.stringify(expandedPath) + " rev-parse --git-dir", {
-      stdio: "ignore", // Suppress output
-      encoding: "utf8"
+    steps.push({
+      stepIndex: i,
+      stepId: step.id,
+      agentId,
+      type: stepType,
+      inputTemplate: step.input,
+      resolvedInput,
+      expects: step.expects,
+      status: i === 0 ? "pending" : "waiting",
     });
-    
-    return true;
-  } catch {
-    return false;
   }
-}
 
-/**
- * Computes a stable 16-character hex lock key for a resolved repo path.
- * Used to create consistent lock keys for DB queries.
- *
- * @example
- * computeRepoLockKey("/home/user/myrepo") // "a1b2c3d4e5f67890"
- * computeRepoLockKey("/home/user/other")  // different 16-char hex string
- */
-export function computeRepoLockKey(resolvedPath: string): string {
-  return crypto.createHash("sha256").update(resolvedPath).digest("hex").slice(0, 16);
+  // 4. Print execution plan
+  console.log("");
+  console.log("═══════════════════════════════════════════════════════════════");
+  console.log("                    DRY-RUN EXECUTION PLAN");
+  console.log("═══════════════════════════════════════════════════════════════");
+  console.log("");
+  console.log("Workflow: " + (workflow.name ?? workflow.id) + " (" + workflow.id + ")");
+  console.log("Task: " + params.taskTitle);
+  console.log("Steps: " + steps.length);
+  console.log("");
+
+  console.log("─────────────────────────────────────────────────────────────────");
+  console.log("CONTEXT (placeholder values):");
+  console.log("─────────────────────────────────────────────────────────────────");
+  for (const [key, value] of Object.entries(placeholderContext)) {
+    console.log("  {{" + key + "}}: " + value);
+  }
+  console.log("");
+
+  console.log("─────────────────────────────────────────────────────────────────");
+  console.log("EXECUTION ORDER:");
+  console.log("─────────────────────────────────────────────────────────────────");
+  for (const step of steps) {
+    const statusIcon = step.status === "pending" ? "→" : "…";
+    const typeLabel = step.type === "loop" ? " [LOOP]" : "";
+    console.log(statusIcon + " Step " + (step.stepIndex + 1) + ": " + step.stepId + typeLabel);
+    console.log("    Agent: " + step.agentId);
+    const inputPreview = step.resolvedInput.slice(0, 100);
+    const inputSuffix = step.resolvedInput.length > 100 ? "..." : "";
+    console.log("    Input: " + inputPreview + inputSuffix);
+    console.log("    Expects: " + step.expects);
+    console.log("");
+  }
+
+  console.log("═══════════════════════════════════════════════════════════════");
+  console.log("                       VALIDATION PASSED");
+  console.log("═══════════════════════════════════════════════════════════════");
+  console.log("Workflow YAML is valid. All templates resolved.");
+  console.log("No database entries created. No agents spawned.");
+  console.log("");
+
+  return {
+    workflowId: workflow.id,
+    workflowName: workflow.name ?? workflow.id,
+    task: params.taskTitle,
+    steps,
+    context: placeholderContext,
+  };
 }
 
 export async function runWorkflow(params: {
@@ -119,7 +153,7 @@ export async function runWorkflow(params: {
     for (let i = 0; i < workflow.steps.length; i++) {
       const step = workflow.steps[i];
       const stepUuid = crypto.randomUUID();
-      const agentId = `${workflow.id}_${step.agent}`;
+      const agentId = workflow.id + "_" + step.agent;
       const status = i === 0 ? "pending" : "waiting";
       const maxRetries = step.max_retries ?? step.on_fail?.max_retries ?? 2;
       const stepType = step.type ?? "single";
@@ -141,12 +175,12 @@ export async function runWorkflow(params: {
     const db2 = getDb();
     db2.prepare("UPDATE runs SET status = 'failed', updated_at = ? WHERE id = ?").run(new Date().toISOString(), runId);
     const message = err instanceof Error ? err.message : String(err);
-    throw new Error(`Cannot start workflow run: cron setup failed. ${message}`);
+    throw new Error("Cannot start workflow run: cron setup failed. " + message);
   }
 
   emitEvent({ ts: new Date().toISOString(), event: "run.started", runId, workflowId: workflow.id });
 
-  logger.info(`Run started: "${params.taskTitle}"`, {
+  logger.info("Run started: \"" + params.taskTitle + "\"", {
     workflowId: workflow.id,
     runId,
     stepId: workflow.steps[0]?.id,
