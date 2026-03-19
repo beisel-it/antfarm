@@ -72,6 +72,46 @@ const TIMEOUT_20_MIN = 1200;
 const TIMEOUT_30_MIN = 1800;
 
 const ROLE_POLICIES: Record<AgentRole, { profile?: string; alsoAllow?: string[]; deny: string[]; timeoutSeconds: number }> = {
+  // planning: read-only reasoning/planning — no exec, no web, no sessions, no memory
+  planning: {
+    profile: "coding",
+    deny: [
+      ...ALWAYS_DENY,
+      "group:runtime", "group:sessions", "group:memory",
+      "write", "edit", "apply_patch",
+      "image", "tts",
+      "group:ui",
+    ],
+    timeoutSeconds: TIMEOUT_20_MIN,
+  },
+
+  // coordination: read + sessions only — used by orchestrators that spawn subagents
+  coordination: {
+    profile: "coding",
+    deny: [
+      ...ALWAYS_DENY,
+      "group:runtime", "group:memory",
+      "write", "edit", "apply_patch",
+      "image", "tts",
+      "group:ui",
+    ],
+    timeoutSeconds: TIMEOUT_20_MIN,
+  },
+
+  // research: read + web only — no exec, no sessions, no memory, no writing
+  research: {
+    profile: "coding",
+    alsoAllow: ["web_search", "web_fetch"],
+    deny: [
+      ...ALWAYS_DENY,
+      "group:runtime", "group:sessions", "group:memory",
+      "write", "edit", "apply_patch",
+      "image", "tts",
+      "group:ui",
+    ],
+    timeoutSeconds: TIMEOUT_20_MIN,
+  },
+
   // analysis: read code, run git/grep, reason — no writing, no web, no browser
   analysis: {
     profile: "coding",
@@ -161,9 +201,10 @@ const SUBAGENT_POLICY = { allowAgents: [] as string[] };
  */
 function inferRole(agentId: string): AgentRole {
   const id = agentId.toLowerCase();
-  if (id.includes("planner") || id.includes("prioritizer") || id.includes("reviewer")
-      || id.includes("investigator") || id.includes("triager")) return "analysis";
-  if (id.includes("verifier")) return "verification";
+  if (id.includes("planner") || id.includes("writer") || id.includes("prioritizer")
+      || id.includes("reviewer") || id.includes("investigator") || id.includes("triager")) return "planning";
+  if (id.includes("orchestrator")) return "coordination";
+  if (id.includes("scout") || id.includes("analyst") || id.includes("skeptic") || id.includes("verifier")) return "research";
   if (id.includes("tester")) return "testing";
   if (id.includes("scanner")) return "scanning";
   if (id === "pr" || id.includes("/pr")) return "pr";
