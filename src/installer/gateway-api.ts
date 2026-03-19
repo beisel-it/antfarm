@@ -48,8 +48,14 @@ async function getGatewayConfig(): Promise<GatewayConfig> {
     secret = config.token;
   }
 
+  // Allow overriding the gateway URL via environment variable.
+  // Useful when the gateway binds to loopback but must be reached via a
+  // Tailscale hostname or other network address (e.g. in CI or remote setups).
+  const urlOverride = process.env.OPENCLAW_GATEWAY_URL?.trim();
+  const url = urlOverride ?? `http://127.0.0.1:${port}`;
+
   return {
-    url: `http://127.0.0.1:${port}`,
+    url,
     token: config.token,
     secret,
   };
@@ -93,11 +99,34 @@ async function findOpenclawBinary(): Promise<string> {
   return "npx";
 }
 
+/** Build extra CLI flags to route the CLI to the correct Gateway.
+ *
+ * When OPENCLAW_GATEWAY_URL is set the CLI must target that URL explicitly,
+ * otherwise it tries ws://127.0.0.1:<port> which may be unreachable (e.g.
+ * when the gateway binds to loopback but must be reached via Tailscale).
+ * The CLI expects a WebSocket URL, so we convert http(s):// → ws(s)://.
+ */
+async function gatewayCliFlags(): Promise<string[]> {
+  const httpUrl = process.env.OPENCLAW_GATEWAY_URL?.trim();
+  if (!httpUrl) return [];
+
+  // Convert HTTP URL to WebSocket URL for the CLI --url flag
+  const wsUrl = httpUrl.replace(/^http:\/\//, "ws://").replace(/^https:\/\//, "wss://");
+  const config = await readOpenClawConfig();
+
+  const secret = config.authMode === "password" ? config.password : config.token;
+  const flags: string[] = ["--url", wsUrl];
+  if (secret) flags.push("--token", secret);
+  return flags;
+}
+
 /** Run an openclaw CLI command and return stdout. */
 function runCli(args: string[]): Promise<string> {
   return new Promise(async (resolve, reject) => {
     const bin = await findOpenclawBinary();
-    const finalArgs = bin === "npx" ? ["openclaw", ...args] : args;
+    const extraFlags = await gatewayCliFlags();
+    const baseArgs = [...args, ...extraFlags];
+    const finalArgs = bin === "npx" ? ["openclaw", ...baseArgs] : baseArgs;
     execFile(bin, finalArgs, { timeout: 30_000 }, (err, stdout, stderr) => {
       if (err) reject(new Error(stderr || err.message));
       else resolve(stdout);
@@ -149,7 +178,7 @@ export async function createAgentCronJob(job: {
     }
 
     if (job.payload?.timeoutSeconds) {
-      args.push("--timeout", `${job.payload.timeoutSeconds}`);
+      args.push("--timeout-seconds", `${job.payload.timeoutSeconds}`);
     }
 
     if (job.payload?.model) {
