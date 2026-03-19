@@ -113,6 +113,8 @@ function printUsage() {
       "antfarm backlog list                 List all backlog entries",
       "antfarm backlog add <title> [--description <text>] [--priority <n>]",
       "                                     Add entry to backlog queue",
+      "antfarm backlog update <id>          Update a backlog entry",
+      "                                     [--title <t>] [--description <d>] [--status <s>] [--priority <n>]",
       "",
       "antfarm medic install                Install medic watchdog cron",
       "antfarm medic uninstall              Remove medic cron",
@@ -454,7 +456,8 @@ async function main() {
   }
 
   if (group === "backlog") {
-    const { addBacklogEntry, listBacklogEntries } = await import("../backlog/index.js");
+    const { addBacklogEntry, listBacklogEntries, updateBacklogEntry } = await import("../backlog/index.js");
+    const { getDb } = await import("../db.js");
 
     if (action === "list") {
       const wantsJson = args.includes("--json");
@@ -509,6 +512,57 @@ async function main() {
       });
 
       console.log(`Added backlog entry: ${entry.id} "${entry.title}"`);
+      return;
+    }
+
+    if (action === "update") {
+      if (!target) { process.stderr.write("Missing id argument.\n"); process.exit(1); }
+
+      // Parse update flags
+      const updates: { title?: string; description?: string; status?: string; priority?: number } = {};
+      let i = 3;
+      while (i < args.length) {
+        if (args[i] === "--title" && args[i + 1]) {
+          updates.title = args[i + 1];
+          i += 2;
+        } else if (args[i] === "--description" && args[i + 1]) {
+          updates.description = args[i + 1];
+          i += 2;
+        } else if (args[i] === "--status" && args[i + 1]) {
+          updates.status = args[i + 1];
+          i += 2;
+        } else if (args[i] === "--priority" && args[i + 1]) {
+          const p = parseInt(args[i + 1], 10);
+          if (!Number.isNaN(p)) updates.priority = p;
+          i += 2;
+        } else {
+          i++;
+        }
+      }
+
+      if (Object.keys(updates).length === 0) {
+        process.stderr.write("No update flags provided. Use --title, --description, --status, or --priority.\n");
+        process.exit(1);
+      }
+
+      // Prefix-match the id (support first 8 chars)
+      const db = getDb();
+      const row = db
+        .prepare("SELECT id FROM backlog WHERE id = ? OR id LIKE ? LIMIT 1")
+        .get(target, `${target}%`) as { id: string } | undefined;
+
+      if (!row) {
+        process.stderr.write(`Backlog entry not found: ${target}\n`);
+        process.exit(1);
+      }
+
+      const updated = updateBacklogEntry(row.id, updates);
+      if (!updated) {
+        process.stderr.write(`Failed to update backlog entry: ${row.id}\n`);
+        process.exit(1);
+      }
+
+      console.log(`Updated backlog entry: ${updated.id}`);
       return;
     }
 
