@@ -110,9 +110,9 @@ function printUsage() {
       "antfarm step fail <step-id> <error>  Fail step with retry logic",
       "antfarm step stories <run-id>       List stories for a run",
       "",
-      "antfarm backlog list                List all backlog items by priority",
-      "antfarm backlog add <title> [--workflow <name>] [--desc <text>]",
-      "                                     Add item to backlog",
+      "antfarm backlog list                List all backlog entries by priority",
+      "antfarm backlog add <title> [--description <text>] [--priority <n>]",
+      "                                     Add entry to backlog queue",
       "",
       "antfarm medic install                Install medic watchdog cron",
       "antfarm medic uninstall              Remove medic cron",
@@ -454,40 +454,40 @@ async function main() {
   }
 
   if (group === "backlog") {
-    const { addBacklogItem, listBacklogItems } = await import("./backlog-ops.js");
+    const { addBacklogEntry, listBacklogEntries } = await import("../backlog/index.js");
 
     if (action === "list") {
-      const items = listBacklogItems();
-      if (items.length === 0) {
-        console.log("No backlog items.");
+      const entries = listBacklogEntries();
+      if (entries.length === 0) {
+        console.log("No backlog entries.");
         return;
       }
 
-      for (const item of items) {
-        const workflowPart = item.workflow_id ? `workflow: ${item.workflow_id}` : "workflow: none";
-        console.log(`[${item.priority}] ${item.title} (${workflowPart} | status: ${item.status})`);
-        if (item.description) {
-          console.log(`  ${item.description}`);
+      for (const entry of entries) {
+        console.log(`[priority:${entry.priority}] ${entry.id} "${entry.title}" (${entry.status})`);
+        if (entry.description) {
+          console.log(`  ${entry.description}`);
         }
       }
       return;
     }
 
     if (action === "add") {
-      if (!target) { process.stderr.write("Missing title.\n"); printUsage(); process.exit(1); }
+      if (!target) { process.stderr.write("Missing title argument.\n"); process.exit(1); }
 
       // Parse title from target and any additional args
       const titleParts: string[] = [target];
-      const flags: { workflow?: string; desc?: string } = {};
+      const flags: { description?: string; priority?: number } = {};
       
       // Parse remaining args for flags
       let i = 3;
       while (i < args.length) {
-        if (args[i] === "--workflow" && args[i + 1]) {
-          flags.workflow = args[i + 1];
+        if (args[i] === "--description" && args[i + 1]) {
+          flags.description = args[i + 1];
           i += 2;
-        } else if (args[i] === "--desc" && args[i + 1]) {
-          flags.desc = args[i + 1];
+        } else if (args[i] === "--priority" && args[i + 1]) {
+          const p = parseInt(args[i + 1], 10);
+          if (!Number.isNaN(p)) flags.priority = p;
           i += 2;
         } else {
           titleParts.push(args[i]);
@@ -498,13 +498,13 @@ async function main() {
       const title = titleParts.join(" ").trim();
       if (!title) { process.stderr.write("Title cannot be empty.\n"); process.exit(1); }
 
-      const result = addBacklogItem({
+      const entry = addBacklogEntry({
         title,
-        workflow: flags.workflow,
-        description: flags.desc,
+        description: flags.description,
+        priority: flags.priority,
       });
 
-      console.log(`Added backlog item ${result.id} (priority ${result.priority}): ${title}`);
+      console.log(`Added backlog entry: ${entry.id} "${entry.title}"`);
       return;
     }
 
