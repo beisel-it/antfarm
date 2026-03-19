@@ -115,6 +115,7 @@ function printUsage() {
       "                                     Add entry to backlog queue",
       "antfarm backlog update <id>          Update a backlog entry",
       "                                     [--title <t>] [--description <d>] [--status <s>] [--priority <n>]",
+      "antfarm backlog delete <id>          Delete a backlog entry",
       "",
       "antfarm medic install                Install medic watchdog cron",
       "antfarm medic uninstall              Remove medic cron",
@@ -456,7 +457,7 @@ async function main() {
   }
 
   if (group === "backlog") {
-    const { addBacklogEntry, listBacklogEntries, updateBacklogEntry } = await import("../backlog/index.js");
+    const { addBacklogEntry, listBacklogEntries, updateBacklogEntry, deleteBacklogEntry } = await import("../backlog/index.js");
     const { getDb } = await import("../db.js");
 
     if (action === "list") {
@@ -563,6 +564,25 @@ async function main() {
       }
 
       console.log(`Updated backlog entry: ${updated.id}`);
+      return;
+    }
+
+    if (action === "delete") {
+      if (!target) { process.stderr.write("Missing id argument.\n"); process.exit(1); }
+
+      // Prefix-match the id (support first 8 chars)
+      const db = getDb();
+      const row = db
+        .prepare("SELECT id FROM backlog WHERE id = ? OR id LIKE ? LIMIT 1")
+        .get(target, `${target}%`) as { id: string } | undefined;
+
+      if (!row) {
+        process.stderr.write(`Backlog entry not found: ${target}\n`);
+        process.exit(1);
+      }
+
+      deleteBacklogEntry(row.id);
+      console.log(`Deleted backlog entry: ${row.id}`);
       return;
     }
 
