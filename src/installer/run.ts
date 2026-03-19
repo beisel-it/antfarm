@@ -75,6 +75,18 @@ export function isGitRepo(path: string): boolean {
   }
 }
 
+/**
+ * Computes a stable 16-character hex lock key for a resolved repo path.
+ * Used to create consistent lock keys for DB queries.
+ *
+ * @example
+ * computeRepoLockKey("/home/user/myrepo") // "a1b2c3d4e5f67890"
+ * computeRepoLockKey("/home/user/other")  // different 16-char hex string
+ */
+export function computeRepoLockKey(resolvedPath: string): string {
+  return crypto.createHash("sha256").update(resolvedPath).digest("hex").slice(0, 16);
+}
+
 export async function runWorkflow(params: {
   workflowId: string;
   taskTitle: string;

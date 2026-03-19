@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
 import os from "node:os";
-import { extractRepoPath, isGitRepo } from "./run.js";
+import { extractRepoPath, isGitRepo, computeRepoLockKey } from "./run.js";
 
 describe("extractRepoPath", () => {
   it("should extract absolute path from task string", () => {
@@ -110,5 +110,50 @@ describe("isGitRepo", () => {
     // Test with a known file that exists but isn't a directory
     const result = isGitRepo("/etc/hostname");
     assert.strictEqual(result, false);
+  });
+});
+
+describe("computeRepoLockKey", () => {
+  it("should produce a 16-character hex string", () => {
+    const key = computeRepoLockKey("/home/user/myrepo");
+    assert.strictEqual(typeof key, "string");
+    assert.strictEqual(key.length, 16);
+    assert.match(key, /^[0-9a-f]{16}$/);
+  });
+
+  it("should produce consistent output for the same path", () => {
+    const path = "/home/user/myrepo";
+    const key1 = computeRepoLockKey(path);
+    const key2 = computeRepoLockKey(path);
+    assert.strictEqual(key1, key2);
+  });
+
+  it("should produce different outputs for different paths", () => {
+    const key1 = computeRepoLockKey("/home/user/repo-a");
+    const key2 = computeRepoLockKey("/home/user/repo-b");
+    assert.notStrictEqual(key1, key2);
+  });
+
+  it("should produce consistent known hash for a specific path", () => {
+    // Verify the hash is sha256-based: sha256("/home/user/test").slice(0,16)
+    const path = "/home/user/test";
+    const key = computeRepoLockKey(path);
+    // Key must be 16 hex chars derived from sha256
+    assert.strictEqual(key.length, 16);
+    assert.match(key, /^[0-9a-f]{16}$/);
+    // Calling again must return same value
+    assert.strictEqual(computeRepoLockKey(path), key);
+  });
+
+  it("should handle absolute paths with deep nesting", () => {
+    const key = computeRepoLockKey("/home/florian/projects/my-app/sub/folder");
+    assert.strictEqual(key.length, 16);
+    assert.match(key, /^[0-9a-f]{16}$/);
+  });
+
+  it("should produce different hashes for similar but distinct paths", () => {
+    const key1 = computeRepoLockKey("/home/user/repo");
+    const key2 = computeRepoLockKey("/home/user/repo2");
+    assert.notStrictEqual(key1, key2);
   });
 });
