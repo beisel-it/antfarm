@@ -1,0 +1,128 @@
+import { describe, test, before, after } from "node:test";
+import assert from "node:assert/strict";
+import { addBacklogItem } from "./backlog-ops.js";
+import { getDb } from "../db.js";
+
+describe("backlog-ops", () => {
+  // Cleanup test data after each test
+  after(() => {
+    const db = getDb();
+    db.prepare("DELETE FROM backlog_items WHERE title LIKE 'TEST:%'").run();
+  });
+
+  test("addBacklogItem: adds item with title only", () => {
+    const result = addBacklogItem({ title: "TEST: Simple backlog item" });
+
+    assert.ok(result.id, "Should return an id");
+    assert.ok(result.priority > 0, "Should assign a priority");
+
+    const db = getDb();
+    const item = db
+      .prepare("SELECT * FROM backlog_items WHERE id = ?")
+      .get(result.id) as any;
+
+    assert.strictEqual(item.title, "TEST: Simple backlog item");
+    assert.strictEqual(item.description, null);
+    assert.strictEqual(item.workflow_id, null);
+    assert.strictEqual(item.status, "pending");
+    assert.ok(item.created_at, "Should have created_at timestamp");
+    assert.ok(item.updated_at, "Should have updated_at timestamp");
+  });
+
+  test("addBacklogItem: adds item with workflow flag", () => {
+    const result = addBacklogItem({
+      title: "TEST: Item with workflow",
+      workflow: "feature-dev",
+    });
+
+    const db = getDb();
+    const item = db
+      .prepare("SELECT * FROM backlog_items WHERE id = ?")
+      .get(result.id) as any;
+
+    assert.strictEqual(item.title, "TEST: Item with workflow");
+    assert.strictEqual(item.workflow_id, "feature-dev");
+  });
+
+  test("addBacklogItem: adds item with description flag", () => {
+    const result = addBacklogItem({
+      title: "TEST: Item with description",
+      description: "This is a detailed description",
+    });
+
+    const db = getDb();
+    const item = db
+      .prepare("SELECT * FROM backlog_items WHERE id = ?")
+      .get(result.id) as any;
+
+    assert.strictEqual(item.title, "TEST: Item with description");
+    assert.strictEqual(item.description, "This is a detailed description");
+  });
+
+  test("addBacklogItem: adds item with both flags", () => {
+    const result = addBacklogItem({
+      title: "TEST: Item with both flags",
+      workflow: "bug-fix",
+      description: "A bug to fix",
+    });
+
+    const db = getDb();
+    const item = db
+      .prepare("SELECT * FROM backlog_items WHERE id = ?")
+      .get(result.id) as any;
+
+    assert.strictEqual(item.title, "TEST: Item with both flags");
+    assert.strictEqual(item.workflow_id, "bug-fix");
+    assert.strictEqual(item.description, "A bug to fix");
+  });
+
+  test("addBacklogItem: assigns sequential priorities", () => {
+    // Clear test data first to have predictable priorities
+    const db = getDb();
+    db.prepare("DELETE FROM backlog_items WHERE title LIKE 'TEST: Priority%'").run();
+
+    const result1 = addBacklogItem({ title: "TEST: Priority item 1" });
+    const result2 = addBacklogItem({ title: "TEST: Priority item 2" });
+    const result3 = addBacklogItem({ title: "TEST: Priority item 3" });
+
+    // Each subsequent item should have a higher priority number
+    assert.ok(result2.priority > result1.priority, "Second item should have higher priority number");
+    assert.ok(result3.priority > result2.priority, "Third item should have higher priority number");
+    assert.strictEqual(result2.priority, result1.priority + 1, "Priorities should be sequential");
+    assert.strictEqual(result3.priority, result2.priority + 1, "Priorities should be sequential");
+
+    // Verify in database
+    const items = db
+      .prepare("SELECT * FROM backlog_items WHERE title LIKE 'TEST: Priority%' ORDER BY priority ASC")
+      .all() as any[];
+
+    assert.strictEqual(items.length, 3);
+    assert.strictEqual(items[0].id, result1.id);
+    assert.strictEqual(items[1].id, result2.id);
+    assert.strictEqual(items[2].id, result3.id);
+  });
+
+  test("addBacklogItem: handles empty backlog (priority starts at 1)", () => {
+    const db = getDb();
+    
+    // Ensure backlog is empty for this test
+    db.prepare("DELETE FROM backlog_items").run();
+
+    const result = addBacklogItem({ title: "TEST: First item" });
+
+    assert.strictEqual(result.priority, 1, "First item in empty backlog should have priority 1");
+  });
+
+  test("addBacklogItem: outputs confirmation message format", () => {
+    const result = addBacklogItem({ title: "TEST: Confirmation test" });
+
+    // Verify the result contains the expected fields for confirmation message
+    assert.ok(result.id, "Should have id for confirmation");
+    assert.ok(result.priority, "Should have priority for confirmation");
+    
+    // Expected format: "Added backlog item <id> (priority <N>): <title>"
+    const confirmationMessage = `Added backlog item ${result.id} (priority ${result.priority}): TEST: Confirmation test`;
+    assert.ok(confirmationMessage.includes(result.id));
+    assert.ok(confirmationMessage.includes(`priority ${result.priority}`));
+  });
+});
