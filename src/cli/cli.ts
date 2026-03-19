@@ -110,6 +110,10 @@ function printUsage() {
       "antfarm step fail <step-id> <error>  Fail step with retry logic",
       "antfarm step stories <run-id>       List stories for a run",
       "",
+      "antfarm backlog list                List all backlog items by priority",
+      "antfarm backlog add <title> [--workflow <name>] [--desc <text>]",
+      "                                     Add item to backlog",
+      "",
       "antfarm medic install                Install medic watchdog cron",
       "antfarm medic uninstall              Remove medic cron",
       "antfarm medic run [--json]           Run medic check now (manual trigger)",
@@ -447,6 +451,66 @@ async function main() {
     const events = getRecentEvents(limit);
     printEvents(events);
     return;
+  }
+
+  if (group === "backlog") {
+    const { addBacklogItem, listBacklogItems } = await import("./backlog-ops.js");
+
+    if (action === "list") {
+      const items = listBacklogItems();
+      if (items.length === 0) {
+        console.log("No backlog items.");
+        return;
+      }
+
+      for (const item of items) {
+        const workflowPart = item.workflow_id ? `workflow: ${item.workflow_id}` : "workflow: none";
+        console.log(`[${item.priority}] ${item.title} (${workflowPart} | status: ${item.status})`);
+        if (item.description) {
+          console.log(`  ${item.description}`);
+        }
+      }
+      return;
+    }
+
+    if (action === "add") {
+      if (!target) { process.stderr.write("Missing title.\n"); printUsage(); process.exit(1); }
+
+      // Parse title from target and any additional args
+      const titleParts: string[] = [target];
+      const flags: { workflow?: string; desc?: string } = {};
+      
+      // Parse remaining args for flags
+      let i = 3;
+      while (i < args.length) {
+        if (args[i] === "--workflow" && args[i + 1]) {
+          flags.workflow = args[i + 1];
+          i += 2;
+        } else if (args[i] === "--desc" && args[i + 1]) {
+          flags.desc = args[i + 1];
+          i += 2;
+        } else {
+          titleParts.push(args[i]);
+          i++;
+        }
+      }
+
+      const title = titleParts.join(" ").trim();
+      if (!title) { process.stderr.write("Title cannot be empty.\n"); process.exit(1); }
+
+      const result = addBacklogItem({
+        title,
+        workflow: flags.workflow,
+        description: flags.desc,
+      });
+
+      console.log(`Added backlog item ${result.id} (priority ${result.priority}): ${title}`);
+      return;
+    }
+
+    process.stderr.write(`Unknown backlog action: ${action}\n`);
+    printUsage();
+    process.exit(1);
   }
 
   if (args.length < 2) { printUsage(); process.exit(1); }
