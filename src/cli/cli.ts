@@ -110,6 +110,7 @@ function printUsage() {
       "antfarm step fail <step-id> <error>  Fail step with retry logic",
       "antfarm step stories <run-id>       List stories for a run",
       "",
+      "antfarm backlog list                List all backlog items by priority",
       "antfarm backlog add <title> [--workflow <name>] [--desc <text>]",
       "                                     Add item to backlog",
       "",
@@ -453,7 +454,24 @@ async function main() {
   }
 
   if (group === "backlog") {
-    const { addBacklogItem } = await import("./backlog-ops.js");
+    const { addBacklogItem, listBacklogItems } = await import("./backlog-ops.js");
+
+    if (action === "list") {
+      const items = listBacklogItems();
+      if (items.length === 0) {
+        console.log("No backlog items.");
+        return;
+      }
+
+      for (const item of items) {
+        const workflowPart = item.workflow_id ? `workflow: ${item.workflow_id}` : "workflow: none";
+        console.log(`[${item.priority}] ${item.title} (${workflowPart} | status: ${item.status})`);
+        if (item.description) {
+          console.log(`  ${item.description}`);
+        }
+      }
+      return;
+    }
 
     if (action === "add") {
       if (!target) { process.stderr.write("Missing title.\n"); printUsage(); process.exit(1); }

@@ -43,3 +43,11 @@ export function addBacklogItem(options: {
 
   return { id, priority: nextPriority };
 }
+
+export function listBacklogItems(): BacklogItem[] {
+  const db = getDb();
+  const items = db
+    .prepare("SELECT * FROM backlog_items ORDER BY priority ASC")
+    .all() as unknown as BacklogItem[];
+  return items;
+}

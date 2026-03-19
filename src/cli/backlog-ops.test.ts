@@ -1,6 +1,6 @@
 import { describe, test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { addBacklogItem } from "./backlog-ops.js";
+import { addBacklogItem, listBacklogItems } from "./backlog-ops.js";
 import { getDb } from "../db.js";
 
 describe("backlog-ops", () => {
@@ -124,5 +124,79 @@ describe("backlog-ops", () => {
     const confirmationMessage = `Added backlog item ${result.id} (priority ${result.priority}): TEST: Confirmation test`;
     assert.ok(confirmationMessage.includes(result.id));
     assert.ok(confirmationMessage.includes(`priority ${result.priority}`));
+  });
+
+  test("listBacklogItems: returns empty array when no items exist", () => {
+    const db = getDb();
+    db.prepare("DELETE FROM backlog_items").run();
+
+    const items = listBacklogItems();
+
+    assert.strictEqual(items.length, 0, "Should return empty array");
+    assert.ok(Array.isArray(items), "Should return an array");
+  });
+
+  test("listBacklogItems: returns all items ordered by priority ascending", () => {
+    const db = getDb();
+    db.prepare("DELETE FROM backlog_items WHERE title LIKE 'TEST: List%'").run();
+
+    // Add items in non-sequential order
+    const item2 = addBacklogItem({ title: "TEST: List item 2" });
+    const item1 = addBacklogItem({ title: "TEST: List item 1" });
+    const item3 = addBacklogItem({ title: "TEST: List item 3" });
+
+    const items = listBacklogItems();
+
+    // Filter to our test items
+    const testItems = items.filter(item => item.title.startsWith("TEST: List"));
+
+    assert.strictEqual(testItems.length, 3, "Should return all 3 items");
+    
+    // Verify ascending priority order
+    assert.ok(testItems[0].priority < testItems[1].priority, "First item should have lower priority number");
+    assert.ok(testItems[1].priority < testItems[2].priority, "Second item should have lower priority number");
+    
+    // Verify these are our items in the right order
+    assert.strictEqual(testItems[0].id, item2.id);
+    assert.strictEqual(testItems[1].id, item1.id);
+    assert.strictEqual(testItems[2].id, item3.id);
+  });
+
+  test("listBacklogItems: includes all expected fields", () => {
+    const db = getDb();
+    db.prepare("DELETE FROM backlog_items WHERE title LIKE 'TEST: Fields%'").run();
+
+    addBacklogItem({
+      title: "TEST: Fields check",
+      workflow: "feature-dev",
+      description: "Test description",
+    });
+
+    const items = listBacklogItems();
+    const testItem = items.find(item => item.title === "TEST: Fields check");
+
+    assert.ok(testItem, "Should find test item");
+    assert.ok(testItem.id, "Should have id");
+    assert.strictEqual(testItem.title, "TEST: Fields check");
+    assert.strictEqual(testItem.description, "Test description");
+    assert.strictEqual(testItem.workflow_id, "feature-dev");
+    assert.ok(testItem.priority, "Should have priority");
+    assert.strictEqual(testItem.status, "pending");
+    assert.ok(testItem.created_at, "Should have created_at");
+    assert.ok(testItem.updated_at, "Should have updated_at");
+  });
+
+  test("listBacklogItems: handles items with null workflow and description", () => {
+    const db = getDb();
+    db.prepare("DELETE FROM backlog_items WHERE title LIKE 'TEST: Null%'").run();
+
+    addBacklogItem({ title: "TEST: Null fields" });
+
+    const items = listBacklogItems();
+    const testItem = items.find(item => item.title === "TEST: Null fields");
+
+    assert.ok(testItem, "Should find test item");
+    assert.strictEqual(testItem.workflow_id, null, "workflow_id should be null");
+    assert.strictEqual(testItem.description, null, "description should be null");
   });
 });
