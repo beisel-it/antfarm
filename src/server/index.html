@@ -174,6 +174,15 @@ select:focus{outline:none;border-color:#8ECFC0}
 .badge-pending{background:var(--accent-muted);color:var(--text-secondary)}
 .badge-blocked{background:var(--accent-orange-faint);color:var(--accent-orange)}
 
+/* ── Backlog column ─────────────────────────────────────────────── */
+.backlog-card{background:var(--bg-surface-alt);border:1px solid var(--border);border-radius:6px;padding:12px}
+.backlog-card.dispatched{opacity:.6}
+.backlog-card-title{font-size:13px;font-weight:500;color:var(--text-primary);margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.backlog-card-meta{font-size:11px;color:var(--text-secondary);display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap}
+.backlog-dispatch-btn{background:var(--accent-green);color:#fff;border:none;border-radius:4px;padding:3px 8px;font-size:11px;font-weight:600;cursor:pointer;transition:opacity .15s}
+.backlog-dispatch-btn:hover{opacity:.85}
+.backlog-dispatch-btn:disabled{opacity:.5;cursor:not-allowed}
+
 /* ── Misc ──────────────────────────────────────────────────────── */
 .empty{color:var(--text-secondary);font-size:12px;text-align:center;padding:24px 8px}
 .refresh-note{color:rgba(255,255,255,.6);font-size:11px;margin-left:auto}
@@ -232,6 +241,7 @@ let workflows = [];
 let currentWf = null;
 let openRunId = null;
 let openRunRefreshInterval = null;
+let backlogEntries = [];
 
 function clearOpenRunRefresh() {
   if (openRunRefreshInterval) {
@@ -279,9 +289,20 @@ function selectWorkflow(id) {
   else document.getElementById('board').innerHTML = '<div class="empty" style="margin:auto">Select a workflow</div>';
 }
 
+async function loadBacklog() {
+  try {
+    backlogEntries = await fetchJSON('/api/backlog');
+  } catch {
+    backlogEntries = [];
+  }
+}
+
 async function loadRuns() {
   if (!currentWf) return;
-  const runs = await fetchJSON(`/api/runs?workflow=${currentWf.id}`);
+  const [runs] = await Promise.all([
+    fetchJSON(`/api/runs?workflow=${currentWf.id}`),
+    loadBacklog(),
+  ]);
   renderBoard(currentWf, runs);
 }
 
@@ -289,6 +310,57 @@ function getActiveStepId(run) {
   if (!run.steps || !run.steps.length) return null;
   const active = run.steps.find(s => s.status !== 'done' && s.status !== 'skipped');
   return active ? active.step_id : run.steps[run.steps.length - 1].step_id;
+}
+
+function renderBacklogColumn() {
+  const entries = backlogEntries;
+  const cardHTML = entries.length === 0
+    ? '<div class="empty">No backlog entries</div>'
+    : entries.map(entry => {
+        const isDispatched = entry.status === 'dispatched';
+        const cls = isDispatched ? 'dispatched' : '';
+        const priorityBadge = entry.priority > 0
+          ? `<span class="badge badge-pending" title="Priority">P${entry.priority}</span>`
+          : '';
+        const checkIcon = isDispatched ? '✓ ' : '';
+        return `<div class="backlog-card ${cls}" data-backlog-id="${entry.id}">
+          <div class="backlog-card-title" title="${esc(entry.title)}">${checkIcon}${esc(entry.title)}</div>
+          <div class="backlog-card-meta">
+            <span style="display:flex;gap:4px;align-items:center">
+              <span class="badge badge-${entry.status}">${entry.status}</span>
+              ${priorityBadge}
+            </span>
+            <button class="backlog-dispatch-btn" onclick="dispatchBacklogEntry('${entry.id}',this)" ${isDispatched ? 'disabled' : ''}>Dispatch</button>
+          </div>
+        </div>`;
+      }).join('');
+  return `<div class="column" id="backlog-column">
+    <div class="column-header">Backlog<span class="count">${entries.length}</span></div>
+    <div class="cards">${cardHTML}</div>
+  </div>`;
+}
+
+async function dispatchBacklogEntry(id, btn) {
+  btn.disabled = true;
+  btn.textContent = '…';
+  try {
+    const r = await fetch(API + `/api/backlog/${id}/dispatch`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const data = await r.json();
+    if (r.ok && data.ok) {
+      // Refresh backlog column
+      await loadBacklog();
+      const col = document.getElementById('backlog-column');
+      if (col) col.outerHTML = renderBacklogColumn();
+    } else {
+      btn.disabled = false;
+      btn.textContent = 'Dispatch';
+      alert('Dispatch failed: ' + (data.error || 'unknown error'));
+    }
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = 'Dispatch';
+    alert('Dispatch failed: ' + e.message);
+  }
 }
 
 function renderBoard(wf, runs) {
@@ -302,7 +374,7 @@ function renderBoard(wf, runs) {
     if (col && columns[col]) columns[col].push(run);
   });
 
-  board.innerHTML = wf.steps.map(step => {
+  const workflowColumnsHTML = wf.steps.map(step => {
     const cards = columns[step.id];
     const cardHTML = cards.length === 0
       ? '<div class="empty">No runs</div>'
@@ -326,6 +398,8 @@ function renderBoard(wf, runs) {
       <div class="cards">${cardHTML}</div>
     </div>`;
   }).join('');
+
+  board.innerHTML = renderBacklogColumn() + workflowColumnsHTML;
 }
 
 const stepIcons = {done:'✓',running:'●',pending:'○',waiting:'◌',failed:'✗',error:'✗'};
@@ -490,7 +564,10 @@ async function loadStories(runId) {
 
 document.getElementById('wf-select').addEventListener('change', e => selectWorkflow(e.target.value));
 loadWorkflows();
-setInterval(() => { if (currentWf) loadRuns(); }, 30000);
+setInterval(() => {
+  if (currentWf) loadRuns();
+  else { loadBacklog(); } // Still refresh backlog even if no workflow selected
+}, 30000);
 
 // ── Medic ───────────────────────────────────────────────────────
 let medicPanelOpen = false;
