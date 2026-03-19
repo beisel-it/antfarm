@@ -6,3 +6,21 @@ dist/
 *.sqlite3
 progress.txt
 progress*.txt
+
+# Security - credentials and secrets
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+*.secret
+
+# Build artifacts
+coverage/
+.nyc_output/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
