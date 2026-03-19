@@ -4,7 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { getDb, getDbPath } from "./db.js";
+import { getDb, getDbPath, getBacklog, BacklogEntry } from "./db.js";
 
 describe("Database Migration", () => {
   const testDbPath = path.join(os.tmpdir(), `antfarm-test-${Date.now()}.db`);
@@ -188,6 +188,119 @@ describe("Database Migration", () => {
       
       // Clean up
       testIds.forEach(id => db.prepare("DELETE FROM backlog_items WHERE id = ?").run(id));
+    });
+  });
+
+  describe("backlog table", () => {
+    it("creates backlog table with correct schema", () => {
+      const db = getDb();
+      const tables = db.prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='backlog'"
+      ).all() as Array<{ name: string }>;
+      assert.equal(tables.length, 1, "backlog table should exist");
+      assert.equal(tables[0].name, "backlog");
+    });
+
+    it("has all required columns with correct types and constraints", () => {
+      const db = getDb();
+      const columns = db.prepare("PRAGMA table_info(backlog)").all() as Array<{
+        cid: number;
+        name: string;
+        type: string;
+        notnull: number;
+        dflt_value: string | null;
+        pk: number;
+      }>;
+      const columnMap = new Map(columns.map(c => [c.name, c]));
+
+      // id: TEXT PRIMARY KEY
+      const idCol = columnMap.get("id")!;
+      assert.ok(idCol, "should have id column");
+      assert.equal(idCol.type, "TEXT");
+      assert.equal(idCol.pk, 1, "id should be primary key");
+
+      // title: TEXT NOT NULL
+      const titleCol = columnMap.get("title")!;
+      assert.ok(titleCol, "should have title column");
+      assert.equal(titleCol.type, "TEXT");
+      assert.equal(titleCol.notnull, 1, "title should be NOT NULL");
+
+      // description: TEXT (nullable)
+      const descCol = columnMap.get("description")!;
+      assert.ok(descCol, "should have description column");
+      assert.equal(descCol.type, "TEXT");
+      assert.equal(descCol.notnull, 0, "description should be nullable");
+
+      // status: TEXT DEFAULT 'pending'
+      const statusCol = columnMap.get("status")!;
+      assert.ok(statusCol, "should have status column");
+      assert.equal(statusCol.type, "TEXT");
+      assert.equal(statusCol.dflt_value, "'pending'", "status should default to 'pending'");
+
+      // priority: INTEGER DEFAULT 0
+      const priorityCol = columnMap.get("priority")!;
+      assert.ok(priorityCol, "should have priority column");
+      assert.equal(priorityCol.type, "INTEGER");
+      assert.equal(priorityCol.dflt_value, "0", "priority should default to 0");
+
+      // created_at: TEXT NOT NULL
+      const createdCol = columnMap.get("created_at")!;
+      assert.ok(createdCol, "should have created_at column");
+      assert.equal(createdCol.type, "TEXT");
+      assert.equal(createdCol.notnull, 1, "created_at should be NOT NULL");
+
+      // updated_at: TEXT NOT NULL
+      const updatedCol = columnMap.get("updated_at")!;
+      assert.ok(updatedCol, "should have updated_at column");
+      assert.equal(updatedCol.type, "TEXT");
+      assert.equal(updatedCol.notnull, 1, "updated_at should be NOT NULL");
+    });
+
+    it("getBacklog() returns BacklogEntry array sorted by priority then created_at", () => {
+      const db = getDb();
+      const now = new Date().toISOString();
+      const prefix = `test-backlog-${Date.now()}`;
+      const ids = [`${prefix}-a`, `${prefix}-b`, `${prefix}-c`];
+
+      db.prepare("INSERT INTO backlog (id, title, description, status, priority, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+        .run(ids[0], "Low Priority", "desc", "pending", 10, now, now);
+      db.prepare("INSERT INTO backlog (id, title, description, status, priority, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+        .run(ids[1], "High Priority", null, "pending", 0, now, now);
+      db.prepare("INSERT INTO backlog (id, title, description, status, priority, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+        .run(ids[2], "Mid Priority", null, "pending", 5, now, now);
+
+      const entries = getBacklog().filter(e => e.id.startsWith(prefix));
+      assert.equal(entries.length, 3);
+      assert.equal(entries[0].title, "High Priority");
+      assert.equal(entries[0].priority, 0);
+      assert.equal(entries[1].title, "Mid Priority");
+      assert.equal(entries[2].title, "Low Priority");
+
+      // Verify BacklogEntry shape
+      const entry: BacklogEntry = entries[0];
+      assert.ok(typeof entry.id === "string");
+      assert.ok(typeof entry.title === "string");
+      assert.ok(typeof entry.priority === "number");
+      assert.ok(typeof entry.status === "string");
+      assert.ok(typeof entry.created_at === "string");
+      assert.ok(typeof entry.updated_at === "string");
+
+      ids.forEach(id => db.prepare("DELETE FROM backlog WHERE id = ?").run(id));
+    });
+
+    it("uses default status 'pending' and priority 0 when not specified", () => {
+      const db = getDb();
+      const now = new Date().toISOString();
+      const testId = `test-backlog-defaults-${Date.now()}`;
+
+      db.prepare("INSERT INTO backlog (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)")
+        .run(testId, "Default Test", now, now);
+
+      const item = db.prepare("SELECT status, priority FROM backlog WHERE id = ?").get(testId) as any;
+      assert.equal(item.status, "pending");
+      assert.equal(item.priority, 0);
+
+      db.prepare("DELETE FROM backlog WHERE id = ?").run(testId);
     });
   });
 });

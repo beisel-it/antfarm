@@ -110,9 +110,12 @@ function printUsage() {
       "antfarm step fail <step-id> <error>  Fail step with retry logic",
       "antfarm step stories <run-id>       List stories for a run",
       "",
-      "antfarm backlog list                List all backlog items by priority",
-      "antfarm backlog add <title> [--workflow <name>] [--desc <text>]",
-      "                                     Add item to backlog",
+      "antfarm backlog list                 List all backlog entries",
+      "antfarm backlog add <title> [--description <text>] [--priority <n>]",
+      "                                     Add entry to backlog queue",
+      "antfarm backlog update <id>          Update a backlog entry",
+      "                                     [--title <t>] [--description <d>] [--status <s>] [--priority <n>]",
+      "antfarm backlog delete <id>          Delete a backlog entry",
       "",
       "antfarm medic install                Install medic watchdog cron",
       "antfarm medic uninstall              Remove medic cron",
@@ -454,40 +457,45 @@ async function main() {
   }
 
   if (group === "backlog") {
-    const { addBacklogItem, listBacklogItems } = await import("./backlog-ops.js");
+    const { addBacklogEntry, listBacklogEntries, updateBacklogEntry, deleteBacklogEntry } = await import("../backlog/index.js");
+    const { getDb } = await import("../db.js");
 
     if (action === "list") {
-      const items = listBacklogItems();
-      if (items.length === 0) {
-        console.log("No backlog items.");
+      const wantsJson = args.includes("--json");
+      const entries = listBacklogEntries();
+      if (entries.length === 0) {
+        console.log("No backlog entries.");
         return;
       }
 
-      for (const item of items) {
-        const workflowPart = item.workflow_id ? `workflow: ${item.workflow_id}` : "workflow: none";
-        console.log(`[${item.priority}] ${item.title} (${workflowPart} | status: ${item.status})`);
-        if (item.description) {
-          console.log(`  ${item.description}`);
-        }
+      if (wantsJson) {
+        console.log(JSON.stringify(entries));
+        return;
+      }
+
+      for (const entry of entries) {
+        const idPrefix = entry.id.slice(0, 8);
+        console.log(`${idPrefix}  [${entry.status}]  ${entry.title}  (priority: ${entry.priority})`);
       }
       return;
     }
 
     if (action === "add") {
-      if (!target) { process.stderr.write("Missing title.\n"); printUsage(); process.exit(1); }
+      if (!target) { process.stderr.write("Missing title argument.\n"); process.exit(1); }
 
       // Parse title from target and any additional args
       const titleParts: string[] = [target];
-      const flags: { workflow?: string; desc?: string } = {};
+      const flags: { description?: string; priority?: number } = {};
       
       // Parse remaining args for flags
       let i = 3;
       while (i < args.length) {
-        if (args[i] === "--workflow" && args[i + 1]) {
-          flags.workflow = args[i + 1];
+        if (args[i] === "--description" && args[i + 1]) {
+          flags.description = args[i + 1];
           i += 2;
-        } else if (args[i] === "--desc" && args[i + 1]) {
-          flags.desc = args[i + 1];
+        } else if (args[i] === "--priority" && args[i + 1]) {
+          const p = parseInt(args[i + 1], 10);
+          if (!Number.isNaN(p)) flags.priority = p;
           i += 2;
         } else {
           titleParts.push(args[i]);
@@ -498,13 +506,83 @@ async function main() {
       const title = titleParts.join(" ").trim();
       if (!title) { process.stderr.write("Title cannot be empty.\n"); process.exit(1); }
 
-      const result = addBacklogItem({
+      const entry = addBacklogEntry({
         title,
-        workflow: flags.workflow,
-        description: flags.desc,
+        description: flags.description,
+        priority: flags.priority,
       });
 
-      console.log(`Added backlog item ${result.id} (priority ${result.priority}): ${title}`);
+      console.log(`Added backlog entry: ${entry.id} "${entry.title}"`);
+      return;
+    }
+
+    if (action === "update") {
+      if (!target) { process.stderr.write("Missing id argument.\n"); process.exit(1); }
+
+      // Parse update flags
+      const updates: { title?: string; description?: string; status?: string; priority?: number } = {};
+      let i = 3;
+      while (i < args.length) {
+        if (args[i] === "--title" && args[i + 1]) {
+          updates.title = args[i + 1];
+          i += 2;
+        } else if (args[i] === "--description" && args[i + 1]) {
+          updates.description = args[i + 1];
+          i += 2;
+        } else if (args[i] === "--status" && args[i + 1]) {
+          updates.status = args[i + 1];
+          i += 2;
+        } else if (args[i] === "--priority" && args[i + 1]) {
+          const p = parseInt(args[i + 1], 10);
+          if (!Number.isNaN(p)) updates.priority = p;
+          i += 2;
+        } else {
+          i++;
+        }
+      }
+
+      if (Object.keys(updates).length === 0) {
+        process.stderr.write("No update flags provided. Use --title, --description, --status, or --priority.\n");
+        process.exit(1);
+      }
+
+      // Prefix-match the id (support first 8 chars)
+      const db = getDb();
+      const row = db
+        .prepare("SELECT id FROM backlog WHERE id = ? OR id LIKE ? LIMIT 1")
+        .get(target, `${target}%`) as { id: string } | undefined;
+
+      if (!row) {
+        process.stderr.write(`Backlog entry not found: ${target}\n`);
+        process.exit(1);
+      }
+
+      const updated = updateBacklogEntry(row.id, updates);
+      if (!updated) {
+        process.stderr.write(`Failed to update backlog entry: ${row.id}\n`);
+        process.exit(1);
+      }
+
+      console.log(`Updated backlog entry: ${updated.id}`);
+      return;
+    }
+
+    if (action === "delete") {
+      if (!target) { process.stderr.write("Missing id argument.\n"); process.exit(1); }
+
+      // Prefix-match the id (support first 8 chars)
+      const db = getDb();
+      const row = db
+        .prepare("SELECT id FROM backlog WHERE id = ? OR id LIKE ? LIMIT 1")
+        .get(target, `${target}%`) as { id: string } | undefined;
+
+      if (!row) {
+        process.stderr.write(`Backlog entry not found: ${target}\n`);
+        process.exit(1);
+      }
+
+      deleteBacklogEntry(row.id);
+      console.log(`Deleted backlog entry: ${row.id}`);
       return;
     }
 

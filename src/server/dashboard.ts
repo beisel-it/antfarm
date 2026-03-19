@@ -4,7 +4,15 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { getDb } from "../db.js";
 import { resolveBundledWorkflowsDir } from "../installer/paths.js";
+import {
+  listBacklogEntries,
+  addBacklogEntry,
+  updateBacklogEntry,
+  deleteBacklogEntry,
+  getBacklogEntry,
+} from "../backlog/index.js";
 import YAML from "yaml";
+import { runWorkflow } from "../installer/run.js";
 
 import type { RunInfo, StepInfo } from "../installer/status.js";
 import { getRunEvents } from "../installer/events.js";
@@ -70,6 +78,21 @@ function serveHTML(res: http.ServerResponse) {
   res.end(fs.readFileSync(filePath, "utf-8"));
 }
 
+function readBody(req: http.IncomingMessage, cb: (body: string) => void): void {
+  const chunks: Buffer[] = [];
+  req.on("data", (chunk: Buffer) => chunks.push(chunk));
+  req.on("end", () => cb(Buffer.concat(chunks).toString("utf-8")));
+}
+
+function findBacklogEntryById(id: string) {
+  const db = getDb();
+  const row = db
+    .prepare("SELECT id FROM backlog WHERE id = ? OR id LIKE ? LIMIT 1")
+    .get(id, `${id}%`) as { id: string } | undefined;
+  if (!row) return null;
+  return getBacklogEntry(row.id);
+}
+
 export function startDashboard(port = 3333): http.Server {
   const server = http.createServer((req, res) => {
     const url = new URL(req.url ?? "/", `http://localhost:${port}`);
@@ -112,6 +135,92 @@ export function startDashboard(port = 3333): http.Server {
     if (p === "/api/medic/checks") {
       const limit = parseInt(url.searchParams.get("limit") ?? "20", 10);
       return json(res, getRecentMedicChecks(limit));
+    }
+
+    // Backlog API
+    if (p === "/api/backlog" && req.method === "GET") {
+      return json(res, listBacklogEntries());
+    }
+
+    if (p === "/api/backlog" && req.method === "POST") {
+      return readBody(req, (body) => {
+        try {
+          const data = JSON.parse(body);
+          if (!data.title || typeof data.title !== "string") {
+            return json(res, { error: "title is required" }, 400);
+          }
+          const entry = addBacklogEntry({
+            title: data.title,
+            description: data.description,
+            priority: data.priority,
+          });
+          return json(res, entry, 201);
+        } catch {
+          return json(res, { error: "invalid JSON" }, 400);
+        }
+      });
+    }
+
+    const backlogDispatchMatch = p.match(/^\/api\/backlog\/([^/]+)\/dispatch$/);
+    if (backlogDispatchMatch && req.method === "POST") {
+      const id = backlogDispatchMatch[1];
+      const entry = findBacklogEntryById(id);
+      if (!entry) return json(res, { error: "not found" }, 404);
+      return readBody(req, async (body) => {
+        try {
+          let workflowId: string | undefined;
+          try {
+            const data = body ? JSON.parse(body) : {};
+            workflowId = data.workflowId;
+          } catch {
+            // ignore parse errors — body is optional
+          }
+
+          // Default to first installed workflow if none specified
+          if (!workflowId) {
+            const workflows = loadWorkflows();
+            if (workflows.length === 0) {
+              return json(res, { error: "no workflows installed" }, 400);
+            }
+            workflowId = workflows[0].id;
+          }
+
+          const taskTitle = entry.title + (entry.description ? "\n\n" + entry.description : "");
+          const run = await runWorkflow({ workflowId, taskTitle });
+
+          updateBacklogEntry(entry.id, { status: "dispatched", run_id: run.id });
+
+          return json(res, { ok: true, runId: run.id, runNumber: run.runNumber });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          return json(res, { error: message }, 400);
+        }
+      });
+    }
+
+    const backlogIdMatch = p.match(/^\/api\/backlog\/([^/]+)$/);
+    if (backlogIdMatch && req.method === "PATCH") {
+      const id = backlogIdMatch[1];
+      return readBody(req, (body) => {
+        try {
+          const data = JSON.parse(body);
+          const entry = findBacklogEntryById(id);
+          if (!entry) return json(res, { error: "not found" }, 404);
+          const updated = updateBacklogEntry(entry.id, data);
+          if (!updated) return json(res, { error: "not found" }, 404);
+          return json(res, updated);
+        } catch {
+          return json(res, { error: "invalid JSON" }, 400);
+        }
+      });
+    }
+
+    if (backlogIdMatch && req.method === "DELETE") {
+      const id = backlogIdMatch[1];
+      const entry = findBacklogEntryById(id);
+      if (!entry) return json(res, { error: "not found" }, 404);
+      deleteBacklogEntry(entry.id);
+      return json(res, { ok: true });
     }
 
     // Serve fonts

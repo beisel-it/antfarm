@@ -78,7 +78,24 @@ function migrate(db: DatabaseSync): void {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS backlog (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      description TEXT,
+      status TEXT DEFAULT 'pending',
+      priority INTEGER DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
+
+  // Add run_id column to backlog table for backwards compat
+  const backlogCols = db.prepare("PRAGMA table_info(backlog)").all() as Array<{ name: string }>;
+  const backlogColNames = new Set(backlogCols.map((c) => c.name));
+  if (!backlogColNames.has("run_id")) {
+    db.exec("ALTER TABLE backlog ADD COLUMN run_id TEXT");
+  }
 
   // Add columns to steps table for backwards compat
   const cols = db.prepare("PRAGMA table_info(steps)").all() as Array<{ name: string }>;
@@ -125,4 +142,22 @@ export function nextRunNumber(): number {
 
 export function getDbPath(): string {
   return DB_PATH;
+}
+
+export interface BacklogEntry {
+  id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  priority: number;
+  run_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export function getBacklog(): BacklogEntry[] {
+  const db = getDb();
+  return db.prepare(
+    "SELECT id, title, description, status, priority, run_id, created_at, updated_at FROM backlog ORDER BY priority ASC, created_at ASC"
+  ).all() as unknown as BacklogEntry[];
 }
