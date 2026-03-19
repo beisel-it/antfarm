@@ -13,6 +13,19 @@ export type WorkflowAgentFiles = {
  * - testing:       Read + exec + browser/web for E2E testing, NO write (tester)
  * - pr:            Read + exec only — just runs `gh pr create` (pr)
  * - scanning:      Read + exec + web search for CVE lookups, NO write (scanner)
+ *
+ * WORKFLOW PATTERNS:
+ *
+ * Ops Workflow (operations/system administration):
+ *   - analyzer (analysis):      Assess system state, document current config, plan changes
+ *   - implementer (coding):     Apply configuration changes with read/write/exec access
+ *   - verifier (verification):  Validate changes took effect, check system health (read + exec only)
+ *
+ * The ops workflow reuses the same WorkflowSpec structure as feature-dev, with agents
+ * performing system configuration instead of code changes. Steps might include:
+ *   1. Analysis: Document current state, identify required changes
+ *   2. Implementation: Apply config files, restart services, update packages
+ *   3. Verification: Confirm services running, config applied, no regressions
  */
 export type AgentRole = "analysis" | "coding" | "verification" | "testing" | "pr" | "scanning";
 
