@@ -7,7 +7,7 @@ dist/
 progress.txt
 progress*.txt
 
-# Security
+# Security - credentials and secrets
 .env
 .env.local
 .env.*.local
@@ -15,7 +15,12 @@ progress*.txt
 *.pem
 *.secret
 
-# Coverage & test artifacts
+# Build artifacts
 coverage/
 .nyc_output/
+
+# Logs
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
