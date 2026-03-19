@@ -32,6 +32,7 @@ function runCli(...args: string[]): { stdout: string; stderr: string; status: nu
   const result = spawnSync(process.execPath, [cliPath, ...args], {
     encoding: "utf-8",
     timeout: 10000,
+    env: { ...process.env, HOME: "/tmp/antfarm-test-home" },
   });
   return {
     stdout: result.stdout ?? "",

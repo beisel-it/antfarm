@@ -231,6 +231,12 @@ describe("Database Migration", () => {
       assert.equal(descCol.type, "TEXT");
       assert.equal(descCol.notnull, 0, "description should be nullable");
 
+      // workflow_id: TEXT (nullable)
+      const workflowCol = columnMap.get("workflow_id")!;
+      assert.ok(workflowCol, "should have workflow_id column");
+      assert.equal(workflowCol.type, "TEXT");
+      assert.equal(workflowCol.notnull, 0, "workflow_id should be nullable");
+
       // status: TEXT DEFAULT 'pending'
       const statusCol = columnMap.get("status")!;
       assert.ok(statusCol, "should have status column");
@@ -282,6 +288,7 @@ describe("Database Migration", () => {
       assert.ok(typeof entry.title === "string");
       assert.ok(typeof entry.priority === "number");
       assert.ok(typeof entry.status === "string");
+      assert.ok("workflow_id" in entry);
       assert.ok(typeof entry.created_at === "string");
       assert.ok(typeof entry.updated_at === "string");
 

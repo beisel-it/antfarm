@@ -93,7 +93,12 @@ function findBacklogEntryById(id: string) {
   return getBacklogEntry(row.id);
 }
 
-export function startDashboard(port = 3333): http.Server {
+interface DashboardDeps {
+  runWorkflow?: typeof runWorkflow;
+}
+
+export function startDashboard(port = 3333, deps: DashboardDeps = {}): http.Server {
+  const runWorkflowImpl = deps.runWorkflow ?? runWorkflow;
   const server = http.createServer((req, res) => {
     const url = new URL(req.url ?? "/", `http://localhost:${port}`);
     const p = url.pathname;
@@ -139,7 +144,8 @@ export function startDashboard(port = 3333): http.Server {
 
     // Backlog API
     if (p === "/api/backlog" && req.method === "GET") {
-      return json(res, listBacklogEntries());
+      const workflowId = url.searchParams.get("workflow") ?? undefined;
+      return json(res, listBacklogEntries(workflowId ? { workflow_id: workflowId } : undefined));
     }
 
     if (p === "/api/backlog" && req.method === "POST") {
@@ -153,6 +159,7 @@ export function startDashboard(port = 3333): http.Server {
             title: data.title,
             description: data.description,
             priority: data.priority,
+            workflow_id: data.workflowId ?? data.workflow_id,
           });
           return json(res, entry, 201);
         } catch {
@@ -178,6 +185,10 @@ export function startDashboard(port = 3333): http.Server {
 
           // Default to first installed workflow if none specified
           if (!workflowId) {
+            workflowId = entry.workflow_id ?? undefined;
+          }
+
+          if (!workflowId) {
             const workflows = loadWorkflows();
             if (workflows.length === 0) {
               return json(res, { error: "no workflows installed" }, 400);
@@ -186,7 +197,7 @@ export function startDashboard(port = 3333): http.Server {
           }
 
           const taskTitle = entry.title + (entry.description ? "\n\n" + entry.description : "");
-          const run = await runWorkflow({ workflowId, taskTitle });
+          const run = await runWorkflowImpl({ workflowId, taskTitle });
 
           updateBacklogEntry(entry.id, { status: "dispatched", run_id: run.id });
 

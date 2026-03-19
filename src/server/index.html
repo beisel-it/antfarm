@@ -291,7 +291,8 @@ function selectWorkflow(id) {
 
 async function loadBacklog() {
   try {
-    backlogEntries = await fetchJSON('/api/backlog');
+    const qs = currentWf ? `?workflow=${encodeURIComponent(currentWf.id)}` : '';
+    backlogEntries = await fetchJSON(`/api/backlog${qs}`);
   } catch {
     backlogEntries = [];
   }

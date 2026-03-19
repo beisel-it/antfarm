@@ -15,6 +15,7 @@ const { getDb, getBacklog } = await import(distDb) as {
     id: string;
     title: string;
     description: string | null;
+    workflow_id: string | null;
     status: string;
     priority: number;
     created_at: string;
@@ -39,7 +40,7 @@ describe("US-001: backlog table migration", () => {
     assert.equal(tables[0].name, "backlog");
   });
 
-  it("has correct columns: id, title, description, status, priority, created_at, updated_at", () => {
+  it("has correct columns: id, title, description, workflow_id, status, priority, created_at, updated_at", () => {
     const db = getDb();
     const columns = db.prepare("PRAGMA table_info(backlog)").all() as Array<{
       name: string;
@@ -64,6 +65,11 @@ describe("US-001: backlog table migration", () => {
     assert.ok(colMap.has("description"), "description column exists");
     assert.equal(colMap.get("description")!.type, "TEXT");
     assert.equal(colMap.get("description")!.notnull, 0);
+
+    // workflow_id: TEXT nullable
+    assert.ok(colMap.has("workflow_id"), "workflow_id column exists");
+    assert.equal(colMap.get("workflow_id")!.type, "TEXT");
+    assert.equal(colMap.get("workflow_id")!.notnull, 0);
 
     // status: TEXT DEFAULT 'pending'
     assert.ok(colMap.has("status"), "status column exists");
@@ -123,6 +129,7 @@ describe("US-001: backlog table migration", () => {
       assert.ok("id" in e, "has id");
       assert.ok("title" in e, "has title");
       assert.ok("description" in e, "has description");
+      assert.ok("workflow_id" in e, "has workflow_id");
       assert.ok("status" in e, "has status");
       assert.ok("priority" in e, "has priority");
       assert.ok("created_at" in e, "has created_at");

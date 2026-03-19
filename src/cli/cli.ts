@@ -28,7 +28,7 @@ import { ensureCliSymlink } from "../installer/symlink.js";
 import { runMedicCheck, getMedicStatus, getRecentMedicChecks } from "../medic/medic.js";
 import { installMedicCron, uninstallMedicCron, isMedicCronInstalled } from "../medic/medic-cron.js";
 import { execSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -48,6 +48,18 @@ function getVersion(): string {
 function formatEventTime(ts: string): string {
   const d = new Date(ts);
   return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
+}
+
+function writeStdout(text: string): void {
+  writeSync(process.stdout.fd, text);
+}
+
+function writeStderr(text: string): void {
+  writeSync(process.stderr.fd, text);
+}
+
+function logLine(text = ""): void {
+  writeStdout(`${text}\n`);
 }
 
 function formatEventLabel(evt: AntfarmEvent): string {
@@ -71,7 +83,7 @@ function formatEventLabel(evt: AntfarmEvent): string {
 }
 
 function printEvents(events: AntfarmEvent[]): void {
-  if (events.length === 0) { console.log("No events yet."); return; }
+  if (events.length === 0) { logLine("No events yet."); return; }
   for (const evt of events) {
     const time = formatEventTime(evt.ts);
     const agent = evt.agentId ? `  ${evt.agentId.split("_").slice(-1)[0]}` : "";
@@ -79,12 +91,12 @@ function printEvents(events: AntfarmEvent[]): void {
     const story = evt.storyTitle ? ` — ${evt.storyTitle}` : "";
     const detail = evt.detail ? ` (${evt.detail})` : "";
     const run = evt.runId ? `  [${evt.runId.slice(0, 8)}]` : "";
-    console.log(`${time}${run}${agent}  ${label}${story}${detail}`);
+    logLine(`${time}${run}${agent}  ${label}${story}${detail}`);
   }
 }
 
 function printUsage() {
-  process.stdout.write(
+  writeStdout(
     [
       "antfarm install                      Install all bundled workflows",
       "antfarm uninstall [--force]          Full uninstall (workflows, agents, crons, DB)",
@@ -111,10 +123,10 @@ function printUsage() {
       "antfarm step stories <run-id>       List stories for a run",
       "",
       "antfarm backlog list                 List all backlog entries",
-      "antfarm backlog add <title> [--description <text>] [--priority <n>]",
+      "antfarm backlog add <title> [--description <text>] [--priority <n>] [--workflow <id>]",
       "                                     Add entry to backlog queue",
       "antfarm backlog update <id>          Update a backlog entry",
-      "                                     [--title <t>] [--description <d>] [--status <s>] [--priority <n>]",
+      "                                     [--title <t>] [--description <d>] [--status <s>] [--priority <n>] [--workflow <id>]",
       "antfarm backlog delete <id>          Delete a backlog entry",
       "",
       "antfarm medic install                Install medic watchdog cron",
@@ -460,32 +472,50 @@ async function main() {
     const { addBacklogEntry, listBacklogEntries, updateBacklogEntry, deleteBacklogEntry } = await import("../backlog/index.js");
     const { getDb } = await import("../db.js");
 
+    async function ensureWorkflowExists(workflowId: string): Promise<void> {
+      const workflows = await listBundledWorkflows();
+      if (!workflows.includes(workflowId)) {
+        writeStderr(`Unknown workflow: ${workflowId}\n`);
+        writeStderr(`Available workflows: ${workflows.length ? workflows.join(", ") : "(none)"}\n`);
+        process.exit(1);
+      }
+    }
+
     if (action === "list") {
       const wantsJson = args.includes("--json");
-      const entries = listBacklogEntries();
+      const workflowFlagIndex = args.indexOf("--workflow");
+      const workflowId = workflowFlagIndex !== -1 ? args[workflowFlagIndex + 1] : undefined;
+      if (workflowFlagIndex !== -1 && !workflowId) {
+        writeStderr("Missing workflow id after --workflow.\n");
+        process.exit(1);
+      }
+      if (workflowId) await ensureWorkflowExists(workflowId);
+
+      const entries = listBacklogEntries(workflowId ? { workflow_id: workflowId } : undefined);
       if (entries.length === 0) {
-        console.log("No backlog entries.");
+        logLine("No backlog entries.");
         return;
       }
 
       if (wantsJson) {
-        console.log(JSON.stringify(entries));
+        logLine(JSON.stringify(entries));
         return;
       }
 
       for (const entry of entries) {
         const idPrefix = entry.id.slice(0, 8);
-        console.log(`${idPrefix}  [${entry.status}]  ${entry.title}  (priority: ${entry.priority})`);
+        const workflowLabel = entry.workflow_id ? `  [workflow: ${entry.workflow_id}]` : "";
+        logLine(`${idPrefix}  [${entry.status}]  ${entry.title}  (priority: ${entry.priority})${workflowLabel}`);
       }
       return;
     }
 
     if (action === "add") {
-      if (!target) { process.stderr.write("Missing title argument.\n"); process.exit(1); }
+      if (!target) { writeStderr("Missing title argument.\n"); process.exit(1); }
 
       // Parse title from target and any additional args
       const titleParts: string[] = [target];
-      const flags: { description?: string; priority?: number } = {};
+      const flags: { description?: string; priority?: number; workflow_id?: string } = {};
       
       // Parse remaining args for flags
       let i = 3;
@@ -497,6 +527,12 @@ async function main() {
           const p = parseInt(args[i + 1], 10);
           if (!Number.isNaN(p)) flags.priority = p;
           i += 2;
+        } else if (args[i] === "--workflow" && args[i + 1]) {
+          flags.workflow_id = args[i + 1];
+          i += 2;
+        } else if (args[i] === "--workflow") {
+          writeStderr("Missing workflow id after --workflow.\n");
+          process.exit(1);
         } else {
           titleParts.push(args[i]);
           i++;
@@ -504,23 +540,25 @@ async function main() {
       }
 
       const title = titleParts.join(" ").trim();
-      if (!title) { process.stderr.write("Title cannot be empty.\n"); process.exit(1); }
+      if (!title) { writeStderr("Title cannot be empty.\n"); process.exit(1); }
+      if (flags.workflow_id) await ensureWorkflowExists(flags.workflow_id);
 
       const entry = addBacklogEntry({
         title,
         description: flags.description,
         priority: flags.priority,
+        workflow_id: flags.workflow_id,
       });
 
-      console.log(`Added backlog entry: ${entry.id} "${entry.title}"`);
+      logLine(`Added backlog entry: ${entry.id} "${entry.title}"`);
       return;
     }
 
     if (action === "update") {
-      if (!target) { process.stderr.write("Missing id argument.\n"); process.exit(1); }
+      if (!target) { writeStderr("Missing id argument.\n"); process.exit(1); }
 
       // Parse update flags
-      const updates: { title?: string; description?: string; status?: string; priority?: number } = {};
+      const updates: { title?: string; description?: string; workflow_id?: string | null; status?: string; priority?: number } = {};
       let i = 3;
       while (i < args.length) {
         if (args[i] === "--title" && args[i + 1]) {
@@ -536,15 +574,25 @@ async function main() {
           const p = parseInt(args[i + 1], 10);
           if (!Number.isNaN(p)) updates.priority = p;
           i += 2;
+        } else if (args[i] === "--workflow" && args[i + 1]) {
+          updates.workflow_id = args[i + 1];
+          i += 2;
+        } else if (args[i] === "--clear-workflow") {
+          updates.workflow_id = null;
+          i += 1;
+        } else if (args[i] === "--workflow") {
+          writeStderr("Missing workflow id after --workflow.\n");
+          process.exit(1);
         } else {
           i++;
         }
       }
 
       if (Object.keys(updates).length === 0) {
-        process.stderr.write("No update flags provided. Use --title, --description, --status, or --priority.\n");
+        writeStderr("No update flags provided. Use --title, --description, --status, --priority, --workflow, or --clear-workflow.\n");
         process.exit(1);
       }
+      if (updates.workflow_id) await ensureWorkflowExists(updates.workflow_id);
 
       // Prefix-match the id (support first 8 chars)
       const db = getDb();
@@ -553,22 +601,22 @@ async function main() {
         .get(target, `${target}%`) as { id: string } | undefined;
 
       if (!row) {
-        process.stderr.write(`Backlog entry not found: ${target}\n`);
+        writeStderr(`Backlog entry not found: ${target}\n`);
         process.exit(1);
       }
 
       const updated = updateBacklogEntry(row.id, updates);
       if (!updated) {
-        process.stderr.write(`Failed to update backlog entry: ${row.id}\n`);
+        writeStderr(`Failed to update backlog entry: ${row.id}\n`);
         process.exit(1);
       }
 
-      console.log(`Updated backlog entry: ${updated.id}`);
+      logLine(`Updated backlog entry: ${updated.id}`);
       return;
     }
 
     if (action === "delete") {
-      if (!target) { process.stderr.write("Missing id argument.\n"); process.exit(1); }
+      if (!target) { writeStderr("Missing id argument.\n"); process.exit(1); }
 
       // Prefix-match the id (support first 8 chars)
       const db = getDb();
@@ -577,16 +625,16 @@ async function main() {
         .get(target, `${target}%`) as { id: string } | undefined;
 
       if (!row) {
-        process.stderr.write(`Backlog entry not found: ${target}\n`);
+        writeStderr(`Backlog entry not found: ${target}\n`);
         process.exit(1);
       }
 
       deleteBacklogEntry(row.id);
-      console.log(`Deleted backlog entry: ${row.id}`);
+      logLine(`Deleted backlog entry: ${row.id}`);
       return;
     }
 
-    process.stderr.write(`Unknown backlog action: ${action}\n`);
+    writeStderr(`Unknown backlog action: ${action}\n`);
     printUsage();
     process.exit(1);
   }
