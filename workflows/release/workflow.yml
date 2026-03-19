@@ -1,0 +1,194 @@
+# release — Prepares and publishes a release after merge.
+# Analyst inspects merged commits and determines release type.
+# Preparer bumps version, writes changelog, commits and tags.
+# Publisher creates the GitHub release with generated notes.
+id: release
+name: Release Workflow
+version: 1
+description: |
+  Prepares and publishes a release from the default branch.
+  Analyst reads commits since the last release and determines semver bump type.
+  Preparer updates version, generates changelog, commits, and creates a git tag.
+  Publisher creates the GitHub release with release notes.
+
+  Task input format: "<repo path> [version-override]"
+  Examples:
+    /home/user/projects/my-app
+    /home/user/projects/my-app 2.1.0
+
+polling:
+  model: default
+  timeoutSeconds: 120
+
+agents:
+  - id: analyst
+    name: Release Analyst
+    role: analysis
+    description: Reads git history since last release, classifies changes, determines semver bump.
+    workspace:
+      baseDir: agents/analyst
+      files:
+        AGENTS.md: agents/analyst/AGENTS.md
+        SOUL.md: agents/analyst/SOUL.md
+        IDENTITY.md: agents/analyst/IDENTITY.md
+
+  - id: preparer
+    name: Release Preparer
+    role: coding
+    description: Bumps version in package files, writes CHANGELOG, commits, and creates git tag.
+    workspace:
+      baseDir: agents/preparer
+      files:
+        AGENTS.md: agents/preparer/AGENTS.md
+        SOUL.md: agents/preparer/SOUL.md
+        IDENTITY.md: agents/preparer/IDENTITY.md
+
+  - id: publisher
+    name: Release Publisher
+    role: pr
+    description: Creates the GitHub release with notes and uploads any build artifacts.
+    workspace:
+      baseDir: agents/publisher
+      files:
+        AGENTS.md: agents/publisher/AGENTS.md
+        SOUL.md: agents/publisher/SOUL.md
+        IDENTITY.md: agents/publisher/IDENTITY.md
+
+steps:
+  - id: analyze
+    agent: analyst
+    input: |
+      Analyze the git history of this repository and determine the next release version.
+
+      TASK INPUT:
+      {{task}}
+
+      Parse the task: the first token is the repo path, optional second token is a version override.
+
+      Instructions:
+      1. cd into the repo path from the task
+      2. Identify the last release tag: git tag --sort=-version:refname | head -1
+         If no tags exist, treat this as v0.0.0 and BUMP_TYPE: minor
+      3. Read commits since last tag: git log <last_tag>..HEAD --oneline --no-merges
+      4. Classify commits by Conventional Commits spec:
+         - feat: → minor bump
+         - fix:, perf:, refactor: → patch bump
+         - BREAKING CHANGE: or feat!:/fix!: → major bump
+         - chore:, docs:, test:, ci: → patch bump (no user-facing change)
+      5. Determine BUMP_TYPE: major|minor|patch
+      6. If version override was provided in the task, use it as NEW_VERSION directly
+      7. Otherwise compute NEW_VERSION from LAST_VERSION + BUMP_TYPE (semver)
+      8. Read package.json, Cargo.toml, pyproject.toml, or similar to find current declared version
+      9. Summarize commits into changelog categories:
+         - Breaking Changes (if any)
+         - Features
+         - Bug Fixes
+         - Performance
+         - Other
+
+      Reply with:
+      STATUS: done
+      REPO: /path/to/repo
+      LAST_VERSION: v1.2.3 (or "none")
+      NEW_VERSION: v1.3.0
+      BUMP_TYPE: major|minor|patch
+      VERSION_FILES: package.json,Cargo.toml (comma-separated files containing version)
+      CHANGELOG_BREAKING: |
+        <list of breaking changes or "none">
+      CHANGELOG_FEATURES: |
+        <list of new features or "none">
+      CHANGELOG_FIXES: |
+        <list of bug fixes or "none">
+      CHANGELOG_OTHER: |
+        <list of other notable changes or "none">
+      COMMIT_COUNT: <number of commits since last release>
+    expects: "STATUS: done"
+    max_retries: 2
+    on_fail:
+      escalate_to: human
+
+  - id: prepare
+    agent: preparer
+    input: |
+      Prepare the release: bump version, write changelog, commit, and tag.
+
+      REPO: {{repo}}
+      LAST_VERSION: {{last_version}}
+      NEW_VERSION: {{new_version}}
+      BUMP_TYPE: {{bump_type}}
+      VERSION_FILES: {{version_files}}
+      CHANGELOG_BREAKING: {{changelog_breaking}}
+      CHANGELOG_FEATURES: {{changelog_features}}
+      CHANGELOG_FIXES: {{changelog_fixes}}
+      CHANGELOG_OTHER: {{changelog_other}}
+
+      Instructions:
+      1. cd into {{repo}}, confirm you are on the default branch (main/master), pull latest
+      2. Bump the version in each file listed in VERSION_FILES:
+         - package.json: update "version" field
+         - Cargo.toml: update version = "..."
+         - pyproject.toml: update version = "..."
+         - Any other file containing the version string
+         Verify no version strings were missed: grep -r "{{last_version}}" . (excluding .git)
+      3. Write/update CHANGELOG.md:
+         - Prepend a new section: ## {{new_version}} — YYYY-MM-DD
+         - Include sections: Breaking Changes, Features, Bug Fixes, Other (omit empty sections)
+         - Use the changelog data from above
+         - Keep existing changelog history below the new section
+      4. Run build if BUILD_CMD is known from repo context, to confirm version doesn't break anything
+      5. Stage and commit: git add -A && git commit -m "chore(release): {{new_version}}"
+      6. Create annotated tag: git tag -a {{new_version}} -m "Release {{new_version}}"
+      7. Push branch and tag: git push && git push origin {{new_version}}
+
+      Reply with:
+      STATUS: done
+      TAG: {{new_version}}
+      COMMIT_SHA: the release commit SHA (git rev-parse HEAD)
+      CHANGELOG_SECTION: |
+        <the exact changelog section you wrote for this release>
+    expects: "STATUS: done"
+    max_retries: 2
+    on_fail:
+      escalate_to: human
+
+  - id: publish
+    agent: publisher
+    input: |
+      Create the GitHub release.
+
+      REPO: {{repo}}
+      NEW_VERSION: {{new_version}}
+      LAST_VERSION: {{last_version}}
+      TAG: {{tag}}
+      COMMIT_SHA: {{commit_sha}}
+      BUMP_TYPE: {{bump_type}}
+      CHANGELOG_SECTION: {{changelog_section}}
+      CHANGELOG_BREAKING: {{changelog_breaking}}
+
+      Instructions:
+      1. cd into {{repo}}
+      2. Confirm the tag exists: git tag -l {{tag}}
+      3. Build release notes from CHANGELOG_SECTION
+      4. Create GitHub release:
+         gh release create {{tag}} \
+           --title "{{new_version}}" \
+           --notes "<release notes from CHANGELOG_SECTION>" \
+           {{if bump_type == "major" or changelog_breaking != "none"}}--latest{{end}}
+
+         For a major release or any breaking changes, mark as --latest.
+         For patch releases, use --latest unless a newer major/minor already exists.
+
+         If the repo produces build artifacts (dist/, *.tar.gz, binaries):
+         - Run the build: look for a build script in package.json or Makefile
+         - Upload artifacts: gh release create {{tag}} dist/* (or appropriate glob)
+
+      5. Confirm: gh release view {{tag}}
+
+      Reply with:
+      STATUS: done
+      RELEASE_URL: https://github.com/org/repo/releases/tag/{{tag}}
+      ARTIFACTS: list of uploaded artifacts or "none"
+    expects: "STATUS: done"
+    max_retries: 2
+    on_fail:
+      escalate_to: human

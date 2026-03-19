@@ -1,0 +1,212 @@
+# pr-manager — Manages an open PR through to merge.
+# Checks CI status, responds to review feedback (loop), and merges when clear.
+id: pr-manager
+name: PR Manager
+version: 1
+description: |
+  Takes an open pull request URL and drives it to merge.
+  Checker reads CI status and review state. If review changes were requested,
+  Responder implements the feedback (with Verifier confirming the fix).
+  Once approved and green, Merger squash-merges the PR.
+
+polling:
+  model: default
+  timeoutSeconds: 120
+
+agents:
+  - id: checker
+    name: Checker
+    role: analysis
+    description: Reads PR state — CI status, review decisions, and outstanding feedback.
+    workspace:
+      baseDir: agents/checker
+      files:
+        AGENTS.md: agents/checker/AGENTS.md
+        SOUL.md: agents/checker/SOUL.md
+        IDENTITY.md: agents/checker/IDENTITY.md
+
+  - id: responder
+    name: Responder
+    role: coding
+    description: Implements reviewer feedback from the PR and pushes fixes.
+    workspace:
+      baseDir: agents/responder
+      files:
+        AGENTS.md: agents/responder/AGENTS.md
+        SOUL.md: agents/responder/SOUL.md
+        IDENTITY.md: agents/responder/IDENTITY.md
+
+  - id: verifier
+    name: Verifier
+    role: verification
+    description: Confirms that reviewer feedback was correctly addressed.
+    workspace:
+      baseDir: agents/verifier
+      files:
+        AGENTS.md: ../../agents/shared/verifier/AGENTS.md
+        SOUL.md: ../../agents/shared/verifier/SOUL.md
+        IDENTITY.md: ../../agents/shared/verifier/IDENTITY.md
+
+  - id: merger
+    name: Merger
+    role: pr
+    description: Merges the PR once CI is green and review is approved.
+    workspace:
+      baseDir: agents/merger
+      files:
+        AGENTS.md: agents/merger/AGENTS.md
+        SOUL.md: agents/merger/SOUL.md
+        IDENTITY.md: agents/merger/IDENTITY.md
+
+steps:
+  - id: check
+    agent: checker
+    input: |
+      Inspect the state of the following pull request and determine what's needed to merge.
+
+      PR: {{task}}
+
+      Instructions:
+      1. Run: gh pr view <PR URL or number> --json number,title,state,headRefName,baseRefName,url,body,mergeable,mergeStateStatus
+      2. Run: gh pr checks <PR> to see CI status
+      3. Run: gh pr reviews <PR> to see review decisions (approved/changes_requested/commented)
+      4. Collect all unresolved reviewer comments that require code changes
+
+      Determine OVERALL_STATUS:
+      - "ready_to_merge" — CI green, at least one approved review, no open changes_requested reviews
+      - "needs_fixes" — CI failing OR reviewer requested changes; include all feedback
+      - "blocked" — mergeable=false (conflicts, branch protection, etc.) — escalate to human
+      - "draft" — PR is in draft state — escalate to human
+
+      Reply with:
+      STATUS: done
+      REPO: /path/to/local/repo (from gh repo view or remote URL)
+      BRANCH: head branch name
+      BASE_BRANCH: base branch name (e.g. main)
+      PR_TITLE: the PR title
+      OVERALL_STATUS: ready_to_merge|needs_fixes|blocked|draft
+      CI_STATUS: passing|failing|pending|skipped
+      REVIEW_STATUS: approved|changes_requested|no_review
+      FEEDBACK: |
+        <list of unresolved reviewer comments requiring code changes, or "none">
+      MERGE_READY: true|false
+    expects: "STATUS: done"
+    max_retries: 2
+    on_fail:
+      escalate_to: human
+
+  - id: respond
+    agent: responder
+    input: |
+      Implement the reviewer feedback on this pull request.
+
+      PR: {{task}}
+      REPO: {{repo}}
+      BRANCH: {{branch}}
+      PR_TITLE: {{pr_title}}
+      REVIEW_STATUS: {{review_status}}
+      CI_STATUS: {{ci_status}}
+      FEEDBACK: {{feedback}}
+
+      VERIFY FEEDBACK (if retrying):
+      {{verify_feedback}}
+
+      Skip this step entirely and reply STATUS: skipped if:
+      - OVERALL_STATUS is "ready_to_merge" (no fixes needed)
+      - FEEDBACK is "none"
+
+      Otherwise:
+      1. cd into {{repo}}, checkout {{branch}}, pull latest
+      2. Read all reviewer comments from: gh pr view <PR> --comments
+      3. Implement each piece of feedback precisely — don't over-engineer
+      4. If CI is failing, read the CI logs: gh run list --branch {{branch}} and gh run view <id> --log-failed
+         Fix the failing checks
+      5. Run build and tests locally to confirm they pass
+      6. Commit: fix(review): address reviewer feedback
+      7. Push: git push
+
+      Reply with:
+      STATUS: done
+      CHANGES: what you changed in response to feedback
+      ADDRESSED: list of reviewer comments you addressed
+
+      Or if nothing to do:
+      STATUS: skipped
+      CHANGES: none required
+    expects: "STATUS:"
+    max_retries: 2
+    on_fail:
+      escalate_to: human
+
+  - id: verify_response
+    agent: verifier
+    input: |
+      Verify that the reviewer feedback was correctly addressed.
+
+      PR: {{task}}
+      REPO: {{repo}}
+      BRANCH: {{branch}}
+      FEEDBACK: {{feedback}}
+      CHANGES: {{changes}}
+      ADDRESSED: {{addressed}}
+
+      Skip and reply STATUS: done / VERIFIED: skipped if CHANGES is "none required".
+
+      Otherwise:
+      1. Run git diff {{base_branch}}..{{branch}} to review all changes
+      2. Cross-check each item in ADDRESSED against the actual diff
+      3. Run build and tests to confirm they pass
+      4. Confirm the changes match what the reviewers asked for — no missing items
+
+      Reply with:
+      STATUS: done
+      VERIFIED: what you confirmed
+
+      Or if issues remain:
+      STATUS: retry
+      ISSUES:
+      - What feedback item was not properly addressed
+    expects: "STATUS: done"
+    on_fail:
+      retry_step: respond
+      max_retries: 2
+      on_exhausted:
+        escalate_to: human
+
+  - id: merge
+    agent: merger
+    input: |
+      Merge the pull request.
+
+      PR: {{task}}
+      REPO: {{repo}}
+      BRANCH: {{branch}}
+      BASE_BRANCH: {{base_branch}}
+      PR_TITLE: {{pr_title}}
+      CI_STATUS: {{ci_status}}
+      REVIEW_STATUS: {{review_status}}
+      CHANGES: {{changes}}
+      VERIFIED: {{verified}}
+
+      Pre-merge safety checks:
+      1. Re-run: gh pr checks <PR> — confirm CI is passing (not just from earlier check)
+      2. Re-run: gh pr view <PR> --json reviewDecision — confirm approved, no open changes_requested
+      3. Confirm mergeable: gh pr view <PR> --json mergeable,mergeStateStatus
+
+      If any check fails: escalate to human with reason.
+
+      If all green:
+      4. Merge with squash: gh pr merge <PR> --squash --auto --delete-branch
+         Use --squash to keep a clean history.
+         Use --delete-branch to clean up the remote branch.
+      5. Confirm the merge completed: gh pr view <PR> --json state,mergedAt
+
+      Reply with:
+      STATUS: done
+      MERGED: true
+      MERGE_COMMIT: merged commit SHA or "squash"
+      MERGED_AT: timestamp
+    expects: "STATUS: done"
+    max_retries: 1
+    on_fail:
+      escalate_to: human
