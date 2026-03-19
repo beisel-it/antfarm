@@ -1,4 +1,6 @@
 import crypto from "node:crypto";
+import { execSync } from "node:child_process";
+import os from "node:os";
 import { loadWorkflowSpec } from "./workflow-spec.js";
 import { resolveWorkflowDir } from "./paths.js";
 import { getDb, nextRunNumber } from "../db.js";
@@ -35,6 +37,42 @@ export function extractRepoPath(taskTitle: string): string | null {
   }
 
   return null;
+}
+
+/**
+ * Validate that a path is a valid git repository.
+ * Expands ~ to the home directory and checks if the path contains a .git directory.
+ * 
+ * @param path - The path to validate (can be absolute, relative, or home-relative with ~)
+ * @returns true if the path is a valid git repository, false otherwise
+ * 
+ * @example
+ * isGitRepo("/home/user/myrepo") // true if valid git repo
+ * isGitRepo("~/projects/app") // true if valid git repo (expands ~)
+ * isGitRepo("/tmp/notrepo") // false
+ */
+export function isGitRepo(path: string): boolean {
+  // Handle empty string - not a valid path
+  if (!path || path.trim() === "") {
+    return false;
+  }
+
+  try {
+    // Expand ~ to home directory
+    const expandedPath = path.startsWith("~/") 
+      ? path.replace(/^~/, os.homedir())
+      : path;
+
+    // Use git rev-parse to check if it's a valid git repository
+    execSync("git -C " + JSON.stringify(expandedPath) + " rev-parse --git-dir", {
+      stdio: "ignore", // Suppress output
+      encoding: "utf8"
+    });
+    
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function runWorkflow(params: {
