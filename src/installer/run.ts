@@ -6,6 +6,37 @@ import { logger } from "../lib/logger.js";
 import { ensureWorkflowCrons } from "./agent-cron.js";
 import { emitEvent } from "./events.js";
 
+/**
+ * Extract a repository path from a task title string.
+ * Looks for the first token that matches an absolute or home-relative path,
+ * or a path explicitly prefixed with "REPO:" or "Repo:".
+ * 
+ * @param taskTitle - The task title string to parse
+ * @returns The extracted repo path, or null if none found
+ * 
+ * @example
+ * extractRepoPath("/home/user/repo add feature") // "/home/user/repo"
+ * extractRepoPath("REPO: ~/myrepo fix bug") // "~/myrepo"
+ * extractRepoPath("add feature to app") // null
+ */
+export function extractRepoPath(taskTitle: string): string | null {
+  // Check for explicit REPO: or Repo: prefix
+  const repoMatch = taskTitle.match(/\b(?:REPO|Repo):\s*(\S+)/);
+  if (repoMatch) {
+    return repoMatch[1];
+  }
+
+  // Look for first token that starts with / or ~/
+  const tokens = taskTitle.split(/\s+/);
+  for (const token of tokens) {
+    if (/^(\/|~\/)/.test(token)) {
+      return token;
+    }
+  }
+
+  return null;
+}
+
 export async function runWorkflow(params: {
   workflowId: string;
   taskTitle: string;
