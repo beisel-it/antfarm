@@ -12,8 +12,8 @@ const cliPath = path.resolve(import.meta.dirname, "..", "dist", "cli", "cli.js")
 
 const { deleteBacklogEntry, getBacklogEntry, listBacklogEntries } = await import(distBacklog) as {
   deleteBacklogEntry: (id: string) => boolean;
-  getBacklogEntry: (id: string) => { id: string; title: string; description: string | null; status: string; priority: number; created_at: string; updated_at: string } | null;
-  listBacklogEntries: () => Array<{ id: string; title: string; description: string | null; status: string; priority: number; created_at: string; updated_at: string }>;
+  getBacklogEntry: (id: string) => { id: string; title: string; description: string | null; workflow_id: string | null; status: string; priority: number; created_at: string; updated_at: string } | null;
+  listBacklogEntries: () => Array<{ id: string; title: string; description: string | null; workflow_id: string | null; status: string; priority: number; created_at: string; updated_at: string }>;
 };
 
 const createdIds: string[] = [];
@@ -22,6 +22,7 @@ function runCli(...args: string[]): { stdout: string; stderr: string; status: nu
   const result = spawnSync(process.execPath, [cliPath, ...args], {
     encoding: "utf-8",
     timeout: 10000,
+    env: { ...process.env, HOME: "/tmp/antfarm-test-home" },
   });
   return {
     stdout: result.stdout ?? "",
@@ -75,6 +76,21 @@ describe("US-003: antfarm backlog add CLI", () => {
     assert.equal(entry!.title, title);
     assert.equal(entry!.description, "my description");
     assert.equal(entry!.priority, 5);
+  });
+
+  it("creates entry with --workflow flag", () => {
+    const title = `US003-workflow-${Date.now()}`;
+    const result = runCli("backlog", "add", title, "--workflow", "feature-dev");
+
+    assert.equal(result.status, 0, `Expected exit 0. stderr: ${result.stderr}`);
+    const id = extractId(result.stdout);
+    assert.ok(id, "Should extract id from output");
+    createdIds.push(id!);
+
+    const entry = getBacklogEntry(id!);
+    assert.ok(entry, "Entry should exist in DB");
+    assert.equal(entry!.title, title);
+    assert.equal(entry!.workflow_id, "feature-dev");
   });
 
   it("exits with code 1 and prints error to stderr when title is missing", () => {

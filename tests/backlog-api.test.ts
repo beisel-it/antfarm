@@ -6,7 +6,7 @@ import { listBacklogEntries, addBacklogEntry, deleteBacklogEntry } from "../dist
 
 let server: http.Server;
 const PORT = 13999;
-const BASE = `http://localhost:${PORT}`;
+let fakeRunCalls = 0;
 
 async function req(
   method: string,
@@ -43,7 +43,18 @@ async function req(
 }
 
 before(async () => {
-  server = startDashboard(PORT);
+  server = startDashboard(PORT, {
+    runWorkflow: async ({ workflowId, taskTitle }) => {
+      fakeRunCalls += 1;
+      return {
+        id: `test-run-${fakeRunCalls}`,
+        runNumber: fakeRunCalls,
+        workflowId,
+        task: taskTitle,
+        status: "running",
+      };
+    },
+  });
   await new Promise<void>((resolve) => server.once("listening", resolve));
 });
 
@@ -72,6 +83,7 @@ describe("Backlog API", () => {
       title: "test-api-entry",
       description: "test desc",
       priority: 5,
+      workflowId: "feature-dev",
     });
     assert.equal(status, 201);
     const entry = data as Record<string, unknown>;
@@ -79,6 +91,7 @@ describe("Backlog API", () => {
     assert.equal(entry.title, "test-api-entry");
     assert.equal(entry.description, "test desc");
     assert.equal(entry.priority, 5);
+    assert.equal(entry.workflow_id, "feature-dev");
     assert.equal(entry.status, "pending");
     createdId = entry.id as string;
   });
@@ -96,6 +109,19 @@ describe("Backlog API", () => {
     const entries = data as Array<Record<string, unknown>>;
     const found = entries.find((e) => e.id === createdId);
     assert.ok(found, "created entry should appear in list");
+  });
+
+  it("GET /api/backlog?workflow=<id> filters by workflow", async () => {
+    const other = addBacklogEntry({ title: "test-api-other-workflow", workflow_id: "bug-fix" });
+    try {
+      const { status, data } = await req("GET", "/api/backlog?workflow=feature-dev");
+      assert.equal(status, 200);
+      const entries = data as Array<Record<string, unknown>>;
+      assert.ok(entries.some((e) => e.id === createdId), "feature-dev entry should be present");
+      assert.ok(!entries.some((e) => e.id === other.id), "bug-fix entry should be filtered out");
+    } finally {
+      deleteBacklogEntry(other.id);
+    }
   });
 
   it("PATCH /api/backlog/:id updates entry fields", async () => {
@@ -119,18 +145,13 @@ describe("Backlog API", () => {
   });
 
   it("POST /api/backlog/:id/dispatch triggers workflow run or returns error", async () => {
-    // With the real dispatch endpoint, it either:
-    // - returns {ok: true, runId, runNumber} on success (workflow installed)
-    // - returns 400 {error: ...} if no workflow installed / dispatch fails
+    const beforeCalls = fakeRunCalls;
     const { status, data } = await req("POST", `/api/backlog/${createdId}/dispatch`);
     const d = data as Record<string, unknown>;
-    if (status === 200) {
-      assert.equal(d.ok, true);
-      assert.ok(d.runId, "should return runId");
-    } else {
-      assert.equal(status, 400);
-      assert.ok(d.error, "should return error message");
-    }
+    assert.equal(status, 200);
+    assert.equal(d.ok, true);
+    assert.equal(d.runId, `test-run-${beforeCalls + 1}`);
+    assert.equal(d.runNumber, beforeCalls + 1);
   });
 
   it("POST /api/backlog/:id/dispatch with unknown id returns 404", async () => {

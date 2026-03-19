@@ -11,10 +11,11 @@ const distBacklog = path.resolve(import.meta.dirname, "..", "dist", "backlog", "
 const cliPath = path.resolve(import.meta.dirname, "..", "dist", "cli", "cli.js");
 
 const { addBacklogEntry, deleteBacklogEntry, getBacklogEntry } = await import(distBacklog) as {
-  addBacklogEntry: (fields: { title: string; description?: string; priority?: number }) => {
+  addBacklogEntry: (fields: { title: string; description?: string; priority?: number; workflow_id?: string }) => {
     id: string;
     title: string;
     description: string | null;
+    workflow_id: string | null;
     status: string;
     priority: number;
     created_at: string;
@@ -25,6 +26,7 @@ const { addBacklogEntry, deleteBacklogEntry, getBacklogEntry } = await import(di
     id: string;
     title: string;
     description: string | null;
+    workflow_id: string | null;
     status: string;
     priority: number;
     created_at: string;
@@ -38,6 +40,7 @@ function runCli(...args: string[]): { stdout: string; stderr: string; status: nu
   const result = spawnSync(process.execPath, [cliPath, ...args], {
     encoding: "utf-8",
     timeout: 10000,
+    env: { ...process.env, HOME: "/tmp/antfarm-test-home" },
   });
   return {
     stdout: result.stdout ?? "",
@@ -113,6 +116,15 @@ describe("US-005: antfarm backlog update CLI", () => {
     const entry = getBacklogEntry(testEntry.id);
     assert.ok(entry, "Entry should exist");
     assert.equal(entry!.description, "A new description", "Description should be updated");
+  });
+
+  it("updates workflow association with --workflow flag", () => {
+    const result = runCli("backlog", "update", testEntry.id, "--workflow", "feature-dev");
+
+    assert.equal(result.status, 0, `Expected exit 0. stderr: ${result.stderr}`);
+    const entry = getBacklogEntry(testEntry.id);
+    assert.ok(entry, "Entry should exist");
+    assert.equal(entry!.workflow_id, "feature-dev", "Workflow should be updated");
   });
 
   it("exits with code 1 and prints error to stderr for non-existent id", () => {

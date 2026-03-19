@@ -15,21 +15,21 @@ const {
   listBacklogEntries,
   getBacklogEntry,
 } = await import(distBacklog) as {
-  addBacklogEntry: (fields: { title: string; description?: string; priority?: number }) => {
-    id: string; title: string; description: string | null; status: string; priority: number;
+  addBacklogEntry: (fields: { title: string; description?: string; priority?: number; workflow_id?: string }) => {
+    id: string; title: string; description: string | null; workflow_id: string | null; status: string; priority: number;
     created_at: string; updated_at: string;
   };
-  updateBacklogEntry: (id: string, fields: object) => { id: string; title: string; description: string | null; status: string; priority: number; created_at: string; updated_at: string } | null;
+  updateBacklogEntry: (id: string, fields: object) => { id: string; title: string; description: string | null; workflow_id: string | null; status: string; priority: number; created_at: string; updated_at: string } | null;
   deleteBacklogEntry: (id: string) => boolean;
-  listBacklogEntries: () => Array<{ id: string; title: string; description: string | null; status: string; priority: number; created_at: string; updated_at: string }>;
-  getBacklogEntry: (id: string) => { id: string; title: string; description: string | null; status: string; priority: number; created_at: string; updated_at: string } | null;
+  listBacklogEntries: (filters?: { workflow_id?: string }) => Array<{ id: string; title: string; description: string | null; workflow_id: string | null; status: string; priority: number; created_at: string; updated_at: string }>;
+  getBacklogEntry: (id: string) => { id: string; title: string; description: string | null; workflow_id: string | null; status: string; priority: number; created_at: string; updated_at: string } | null;
 };
 
 const prefix = `test-us002-${Date.now()}`;
 const createdIds: string[] = [];
 
 // Helper that auto-tracks created IDs for cleanup
-function add(fields: { title: string; description?: string; priority?: number }) {
+function add(fields: { title: string; description?: string; priority?: number; workflow_id?: string }) {
   const e = addBacklogEntry({ ...fields, title: `${prefix}-${fields.title}` });
   createdIds.push(e.id);
   return e;
@@ -59,6 +59,12 @@ describe("US-002: backlog CRUD ops", () => {
       assert.equal(entry.priority, 0);
       assert.equal(entry.status, "pending");
       assert.equal(entry.description, null);
+      assert.equal(entry.workflow_id, null);
+    });
+
+    it("stores workflow association when provided", () => {
+      const entry = add({ title: "Workflow scoped", workflow_id: "feature-dev" });
+      assert.equal(entry.workflow_id, "feature-dev");
     });
   });
 
@@ -106,6 +112,13 @@ describe("US-002: backlog CRUD ops", () => {
       assert.equal(updated.priority, 10);
     });
 
+    it("modifies workflow association", () => {
+      const entry = add({ title: "Workflow update" });
+      const updated = updateBacklogEntry(entry.id, { workflow_id: "bug-fix" });
+      assert.ok(updated);
+      assert.equal(updated.workflow_id, "bug-fix");
+    });
+
     it("returns null for non-existent id", () => {
       const result = updateBacklogEntry("ghost-id-us002", { title: "Nope" });
       assert.equal(result, null);
@@ -146,6 +159,17 @@ describe("US-002: backlog CRUD ops", () => {
       assert.equal(ours[0].id, e2.id, "highest priority first");
       assert.equal(ours[1].id, e3.id, "mid priority second");
       assert.equal(ours[2].id, e1.id, "lowest priority last");
+    });
+
+    it("filters by workflow_id when requested", () => {
+      const scoped = add({ title: "List-Scoped", workflow_id: "feature-dev" });
+      const other = add({ title: "List-Other", workflow_id: "bug-fix" });
+
+      const featureDev = listBacklogEntries({ workflow_id: "feature-dev" });
+      const ids = featureDev.map((e) => e.id);
+
+      assert.ok(ids.includes(scoped.id), "matching workflow entry should be included");
+      assert.ok(!ids.includes(other.id), "non-matching workflow entry should be excluded");
     });
   });
 });

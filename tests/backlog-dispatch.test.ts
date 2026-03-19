@@ -22,7 +22,8 @@ import { getDb } from "../dist/db.js";
 
 let server: http.Server;
 const PORT = 14099;
-const BASE = `http://localhost:${PORT}`;
+let fakeRunCalls = 0;
+let lastRunRequest: { workflowId: string; taskTitle: string } | null = null;
 
 async function req(
   method: string,
@@ -59,30 +60,27 @@ async function req(
 }
 
 before(async () => {
-  server = startDashboard(PORT);
+  server = startDashboard(PORT, {
+    runWorkflow: async ({ workflowId, taskTitle }) => {
+      if (workflowId.startsWith("nonexistent")) {
+        throw new Error(`Workflow "${workflowId}" not found`);
+      }
+      fakeRunCalls += 1;
+      lastRunRequest = { workflowId, taskTitle };
+      return {
+        id: `test-dispatch-run-${fakeRunCalls}`,
+        runNumber: fakeRunCalls,
+        workflowId,
+        task: taskTitle,
+        status: "running",
+      };
+    },
+  });
   await new Promise<void>((resolve) => server.once("listening", resolve));
 });
 
 after(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
-  // Clean up test runs from DB (delete steps first due to FK constraint)
-  // Retry a few times in case of DB lock from concurrent test files
-  for (let attempt = 0; attempt < 5; attempt++) {
-    try {
-      const db = getDb();
-      const testRuns = db
-        .prepare("SELECT id FROM runs WHERE task LIKE 'test-dispatch-%'")
-        .all() as Array<{ id: string }>;
-      for (const r of testRuns) {
-        db.prepare("DELETE FROM steps WHERE run_id = ?").run(r.id);
-        db.prepare("DELETE FROM stories WHERE run_id = ?").run(r.id);
-      }
-      db.exec("DELETE FROM runs WHERE task LIKE 'test-dispatch-%'");
-      break;
-    } catch {
-      await new Promise<void>((r) => setTimeout(r, 200 * (attempt + 1)));
-    }
-  }
 });
 
 describe("Backlog Dispatch - run_id column migration", () => {
@@ -140,24 +138,22 @@ describe("Backlog Dispatch - POST /api/backlog/:id/dispatch", () => {
       description: "dispatched via default",
     });
 
+    const beforeCalls = fakeRunCalls;
     const { status, data } = await req("POST", `/api/backlog/${entry2.id}/dispatch`);
-    // If no workflows installed, expect 400; if workflows installed, expect 200
     const d = data as Record<string, unknown>;
-    if (status === 400) {
-      // Acceptable if no workflows installed in test env
-      assert.ok(d.error, "should have error message when no workflows installed");
-    } else {
-      assert.equal(status, 200);
-      assert.equal(d.ok, true);
-      assert.ok(d.runId, "should return runId");
-      assert.ok(typeof d.runNumber === "number", "should return runNumber");
+    assert.equal(status, 200);
+    assert.equal(d.ok, true);
+    assert.equal(d.runId, `test-dispatch-run-${beforeCalls + 1}`);
+    assert.equal(d.runNumber, beforeCalls + 1);
+    assert.ok(lastRunRequest, "dispatch should call the workflow runner");
+    assert.match(lastRunRequest.workflowId, /\S/, "default dispatch should resolve a workflow id");
+    assert.equal(lastRunRequest.taskTitle, "test-dispatch-default-workflow\n\ndispatched via default");
 
-      // Verify DB state
-      const updated = getBacklogEntry(entry2.id);
-      assert.ok(updated, "entry should still exist");
-      assert.equal(updated!.status, "dispatched");
-      assert.equal(updated!.run_id, d.runId);
-    }
+    // Verify DB state
+    const updated = getBacklogEntry(entry2.id);
+    assert.ok(updated, "entry should still exist");
+    assert.equal(updated!.status, "dispatched");
+    assert.equal(updated!.run_id, d.runId);
 
     // Clean up
     try { deleteBacklogEntry(entry2.id); } catch { /* ok */ }
@@ -176,22 +172,20 @@ describe("Backlog Dispatch - POST /api/backlog/:id/dispatch", () => {
       { workflowId: "feature-dev" }
     );
     const d = data as Record<string, unknown>;
+    assert.equal(status, 200);
+    assert.equal(d.ok, true);
+    assert.ok(typeof d.runId === "string", "should return runId");
+    assert.ok(typeof d.runNumber === "number", "should return runNumber");
+    assert.deepEqual(lastRunRequest, {
+      workflowId: "feature-dev",
+      taskTitle: "test-dispatch-explicit-workflow\n\ndispatched via explicit workflowId",
+    });
 
-    if (status === 400) {
-      // Acceptable if feature-dev workflow not installed in test env
-      assert.ok(d.error, "should return error message");
-    } else {
-      assert.equal(status, 200);
-      assert.equal(d.ok, true);
-      assert.ok(d.runId, "should return runId");
-      assert.ok(typeof d.runNumber === "number", "should return runNumber");
-
-      // Verify status and run_id updated
-      const updated = getBacklogEntry(entry3.id);
-      assert.ok(updated, "entry should still exist");
-      assert.equal(updated!.status, "dispatched");
-      assert.equal(updated!.run_id, d.runId);
-    }
+    // Verify status and run_id updated
+    const updated = getBacklogEntry(entry3.id);
+    assert.ok(updated, "entry should still exist");
+    assert.equal(updated!.status, "dispatched");
+    assert.equal(updated!.run_id, d.runId);
 
     try { deleteBacklogEntry(entry3.id); } catch { /* ok */ }
   });
