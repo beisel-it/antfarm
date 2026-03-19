@@ -323,14 +323,16 @@ function renderBacklogColumn() {
           ? `<span class="badge badge-pending" title="Priority">P${entry.priority}</span>`
           : '';
         const checkIcon = isDispatched ? '✓ ' : '';
-        return `<div class="backlog-card ${cls}" data-backlog-id="${entry.id}">
+        const btnLabel = isDispatched ? 'Dispatched ✓' : 'Dispatch';
+        return `<div class="backlog-card ${cls}" data-backlog-id="${entry.id}" data-backlog-title="${esc(entry.title)}">
           <div class="backlog-card-title" title="${esc(entry.title)}">${checkIcon}${esc(entry.title)}</div>
+          <div class="backlog-card-error" style="display:none;color:var(--status-failed,#e05);font-size:11px;margin-top:4px"></div>
           <div class="backlog-card-meta">
             <span style="display:flex;gap:4px;align-items:center">
-              <span class="badge badge-${entry.status}">${entry.status}</span>
+              <span class="badge badge-${entry.status} backlog-status-badge">${entry.status}</span>
               ${priorityBadge}
             </span>
-            <button class="backlog-dispatch-btn" onclick="dispatchBacklogEntry('${entry.id}',this)" ${isDispatched ? 'disabled' : ''}>Dispatch</button>
+            <button class="backlog-dispatch-btn" onclick="dispatchBacklogEntry('${entry.id}',this)" ${isDispatched ? 'disabled' : ''}>${btnLabel}</button>
           </div>
         </div>`;
       }).join('');
@@ -341,25 +343,41 @@ function renderBacklogColumn() {
 }
 
 async function dispatchBacklogEntry(id, btn) {
+  const card = btn.closest('[data-backlog-id]');
+  const title = card ? (card.getAttribute('data-backlog-title') || id) : id;
+  if (!confirm(`Dispatch "${title}" to the agent?`)) return;
+  const errEl = card ? card.querySelector('.backlog-card-error') : null;
+  if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
   btn.disabled = true;
-  btn.textContent = '…';
+  btn.textContent = 'Dispatching...';
   try {
-    const r = await fetch(API + `/api/backlog/${id}/dispatch`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const body = JSON.stringify({ workflowId: currentWf?.id });
+    const r = await fetch(API + `/api/backlog/${id}/dispatch`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
     const data = await r.json();
     if (r.ok && data.ok) {
-      // Refresh backlog column
+      // Update card in-place: status badge + button
+      btn.textContent = 'Dispatched ✓';
+      btn.disabled = true;
+      if (card) {
+        card.classList.add('dispatched');
+        const badge = card.querySelector('.backlog-status-badge');
+        if (badge) { badge.textContent = 'dispatched'; badge.className = 'badge badge-dispatched backlog-status-badge'; }
+        const titleEl = card.querySelector('.backlog-card-title');
+        if (titleEl && !titleEl.textContent.startsWith('✓ ')) titleEl.textContent = '✓ ' + titleEl.textContent;
+      }
+      // Also refresh global state for next render
       await loadBacklog();
-      const col = document.getElementById('backlog-column');
-      if (col) col.outerHTML = renderBacklogColumn();
     } else {
       btn.disabled = false;
       btn.textContent = 'Dispatch';
-      alert('Dispatch failed: ' + (data.error || 'unknown error'));
+      const msg = 'Dispatch failed: ' + (data.error || 'unknown error');
+      if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; }
     }
   } catch (e) {
     btn.disabled = false;
     btn.textContent = 'Dispatch';
-    alert('Dispatch failed: ' + e.message);
+    const msg = 'Dispatch failed: ' + (e instanceof Error ? e.message : String(e));
+    if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; }
   }
 }
 
