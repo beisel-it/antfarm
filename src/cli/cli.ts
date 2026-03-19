@@ -110,7 +110,7 @@ function printUsage() {
       "antfarm step fail <step-id> <error>  Fail step with retry logic",
       "antfarm step stories <run-id>       List stories for a run",
       "",
-      "antfarm backlog list                List all backlog entries by priority",
+      "antfarm backlog list                 List all backlog entries",
       "antfarm backlog add <title> [--description <text>] [--priority <n>]",
       "                                     Add entry to backlog queue",
       "",
@@ -457,17 +457,21 @@ async function main() {
     const { addBacklogEntry, listBacklogEntries } = await import("../backlog/index.js");
 
     if (action === "list") {
+      const wantsJson = args.includes("--json");
       const entries = listBacklogEntries();
       if (entries.length === 0) {
         console.log("No backlog entries.");
         return;
       }
 
+      if (wantsJson) {
+        console.log(JSON.stringify(entries));
+        return;
+      }
+
       for (const entry of entries) {
-        console.log(`[priority:${entry.priority}] ${entry.id} "${entry.title}" (${entry.status})`);
-        if (entry.description) {
-          console.log(`  ${entry.description}`);
-        }
+        const idPrefix = entry.id.slice(0, 8);
+        console.log(`${idPrefix}  [${entry.status}]  ${entry.title}  (priority: ${entry.priority})`);
       }
       return;
     }
