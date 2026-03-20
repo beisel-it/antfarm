@@ -228,6 +228,9 @@ export function startDashboard(port = 3333, deps: DashboardDeps = {}): http.Serv
             priority: data.priority,
             projectId: data.projectId,
             workflowId: data.workflowId,
+            notes: data.notes,
+            tags: data.tags,
+            acceptanceCriteria: data.acceptanceCriteria,
           });
           return json(res, entry, 201);
         } catch {
