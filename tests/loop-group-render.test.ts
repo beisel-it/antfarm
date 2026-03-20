@@ -18,40 +18,38 @@ const html = readFileSync(join(__dirname, '../dist/server/index.html'), 'utf-8')
  * Extract the renderRunPanel function source from the HTML and evaluate it
  * in a minimal context that provides a fake `document.getElementById`.
  */
-function callRenderRunPanel(run: object): string {
-  // Extract just the function body
-  const fnStart = html.indexOf('function renderRunPanel(run)');
-  assert.ok(fnStart >= 0, 'renderRunPanel should exist in dist/server/index.html');
-
-  // Find the matching closing brace by counting braces
+function extractFn(src: string, name: string): string {
+  const start = src.indexOf(`function ${name}`);
+  assert.ok(start >= 0, `${name} should exist in dist/server/index.html`);
   let depth = 0;
-  let i = fnStart;
-  let fnEnd = -1;
-  while (i < html.length) {
-    if (html[i] === '{') depth++;
-    else if (html[i] === '}') {
+  let i = start;
+  let end = -1;
+  while (i < src.length) {
+    if (src[i] === '{') depth++;
+    else if (src[i] === '}') {
       depth--;
-      if (depth === 0) { fnEnd = i + 1; break; }
+      if (depth === 0) { end = i + 1; break; }
     }
     i++;
   }
-  assert.ok(fnEnd > fnStart, 'Could not find end of renderRunPanel');
-  const fnSrc = html.slice(fnStart, fnEnd);
+  assert.ok(end > start, `Could not find end of ${name}`);
+  return src.slice(start, end);
+}
 
-  // We also need helper functions used inside renderRunPanel: esc, parseTS, stepIcons
-  const escMatch = html.match(/function esc\(.*?\{[\s\S]*?\n\}/);
-  const parseTSMatch = html.match(/function parseTS\(.*?\{[\s\S]*?\n\}/);
-  // stepIcons is an object literal
-  const stepIconsMatch = html.match(/const stepIcons\s*=\s*\{[\s\S]*?\};/);
+function callRenderRunPanel(run: object): string {
+  const badgeSrc = extractFn(html, 'renderLoopBadge');
+  const fnSrc = extractFn(html, 'renderRunPanel');
 
   let capturedHTML = '';
+  const fakeEl = {
+    get innerHTML() { return capturedHTML; },
+    set innerHTML(v: string) { capturedHTML = v; },
+  };
+
   const context = {
+    window: { _lastStories: [] },
     document: {
-      getElementById: (_id: string) => ({
-        innerHTML: '',
-        get innerHTML() { return capturedHTML; },
-        set innerHTML(v: string) { capturedHTML = v; },
-      }),
+      getElementById: (_id: string) => fakeEl,
     },
     esc: (s: string) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
     parseTS: (ts: string) => ts ? new Date(ts) : null,
@@ -60,7 +58,7 @@ function callRenderRunPanel(run: object): string {
     console,
   };
 
-  const script = `(${fnSrc})(run)`;
+  const script = `${badgeSrc}\n${fnSrc}\nrenderRunPanel(run)`;
   runInNewContext(script, { ...context, run });
   return capturedHTML;
 }

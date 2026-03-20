@@ -745,6 +745,16 @@ async function refreshOpenRunPanel() {
   }
 }
 
+function renderLoopBadge() {
+  const stories = window._lastStories || [];
+  const total = stories.length;
+  if (total === 0) {
+    return `<div class="loop-badge-wrapper"><div class="loop-badge" title="Loop progress"><div class="loop-badge-text">0%</div></div></div>`;
+  }
+  const done = stories.filter(s => s.status === 'done').length;
+  const pct = Math.round((done / total) * 100);
+  return `<div class="loop-badge-wrapper"><div class="loop-badge" style="background:conic-gradient(var(--accent-teal) 0% ${pct}%,var(--accent-muted) ${pct}% 100%)" title="Loop progress: ${done}/${total}"><div class="loop-badge-text">${done}/${total}</div></div></div>`;
+}
 function renderRunPanel(run) {
   const panel = document.getElementById('panel');
   const created = run.created_at ? parseTS(run.created_at)?.toLocaleString() || "" : '';
@@ -752,8 +762,11 @@ function renderRunPanel(run) {
   // Build a map from step UUID to loop group index for quick lookup
   const loopGroups = run.loopGroups || [];
   const stepToGroupIdx = new Map();
+  // Build a set of verify step IDs so we can inject the badge before them
+  const verifyStepIds = new Set();
   loopGroups.forEach((g, idx) => {
     (g.stepIds || []).forEach(sid => stepToGroupIdx.set(sid, idx));
+    if (g.verifyStepId) verifyStepIds.add(g.verifyStepId);
   });
   function renderStepRow(s) {
     const st = s.status || 'waiting';
@@ -790,6 +803,10 @@ function renderRunPanel(run) {
       if (gIdx !== null) {
         parts.push(`<div class="loop-group"><div class="loop-group-label">Repeating loop</div><div class="loop-group-steps">`);
       }
+    }
+    // Inject badge before verify step (between implement and verify rows)
+    if (verifyStepIds.has(s.id)) {
+      parts.push(renderLoopBadge());
     }
     parts.push(renderStepRow(s));
   });
@@ -870,6 +887,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closePanel()
 
 async function loadStories(runId) {
   const stories = await fetchJSON(`/api/runs/${runId}/stories`);
+  window._lastStories = stories || [];
   const panel = document.getElementById('stories-panel');
   if (!stories || stories.length === 0) { panel.innerHTML = ''; return; }
   const done = stories.filter(s => s.status === 'done').length;
