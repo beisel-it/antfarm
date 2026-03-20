@@ -14,6 +14,7 @@ import { loadWorkflowSpec } from "./workflow-spec.js";
 import { resolveWorkflowDir } from "./paths.js";
 import { isFrontendChange } from "../lib/frontend-detect.js";
 import type { WorkflowStepFailure } from "./types.js";
+import { deleteBacklogEntry } from "../backlog/ops.js";
 
 /**
  * Parse KEY: value lines from step output with support for multi-line values.
@@ -1068,6 +1069,16 @@ function advancePipeline(runId: string): { advanced: boolean; runCompleted: bool
     ).run(runId);
     emitEvent({ ts: new Date().toISOString(), event: "run.completed", runId, workflowId: wfId });
     logger.info("Run completed", { runId, workflowId: wfId });
+    // Auto-delete corresponding backlog entry if one exists
+    try {
+      const backlogRow = db.prepare("SELECT id FROM backlog WHERE run_id = ?").get(runId) as { id: string } | undefined;
+      if (backlogRow) {
+        deleteBacklogEntry(backlogRow.id);
+        logger.info(`Auto-deleted backlog entry ${backlogRow.id} for completed run`, { runId });
+      }
+    } catch (err) {
+      logger.warn(`Failed to delete backlog entry for completed run: ${String(err)}`, { runId });
+    }
     archiveRunProgress(runId);
     scheduleRunCronTeardown(runId);
     return { advanced: false, runCompleted: true };
