@@ -55,11 +55,24 @@ function loadWorkflows(): WorkflowDef[] {
   return results;
 }
 
-function getRuns(workflowId?: string): Array<RunInfo & { steps: StepInfo[] }> {
+function getRuns(workflowId?: string, statusFilter?: string[]): Array<RunInfo & { steps: StepInfo[] }> {
   const db = getDb();
-  const runs = workflowId
-    ? db.prepare("SELECT * FROM runs WHERE workflow_id = ? ORDER BY created_at DESC").all(workflowId) as RunInfo[]
-    : db.prepare("SELECT * FROM runs ORDER BY created_at DESC").all() as RunInfo[];
+  let runs: RunInfo[];
+  if (workflowId && statusFilter && statusFilter.length > 0) {
+    const placeholders = statusFilter.map(() => "?").join(", ");
+    runs = db.prepare(
+      `SELECT * FROM runs WHERE workflow_id = ? AND status IN (${placeholders}) ORDER BY created_at DESC`
+    ).all(workflowId, ...statusFilter) as RunInfo[];
+  } else if (workflowId) {
+    runs = db.prepare("SELECT * FROM runs WHERE workflow_id = ? ORDER BY created_at DESC").all(workflowId) as RunInfo[];
+  } else if (statusFilter && statusFilter.length > 0) {
+    const placeholders = statusFilter.map(() => "?").join(", ");
+    runs = db.prepare(
+      `SELECT * FROM runs WHERE status IN (${placeholders}) ORDER BY created_at DESC`
+    ).all(...statusFilter) as RunInfo[];
+  } else {
+    runs = db.prepare("SELECT * FROM runs ORDER BY created_at DESC").all() as RunInfo[];
+  }
   return runs.map((r) => {
     const steps = db.prepare("SELECT * FROM steps WHERE run_id = ? ORDER BY step_index ASC").all(r.id) as StepInfo[];
     return { ...r, steps };
@@ -172,7 +185,11 @@ export function startDashboard(port = 3333, deps: DashboardDeps = {}): http.Serv
 
     if (p === "/api/runs") {
       const wf = url.searchParams.get("workflow") ?? undefined;
-      return json(res, getRuns(wf));
+      const statusParam = url.searchParams.get("status");
+      const statusFilter = statusParam && statusParam.trim() !== ""
+        ? statusParam.split(",").map(s => s.trim()).filter(s => s !== "")
+        : undefined;
+      return json(res, getRuns(wf, statusFilter));
     }
 
     // Medic API
