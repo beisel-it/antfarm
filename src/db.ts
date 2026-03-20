@@ -106,6 +106,12 @@ function migrate(db: DatabaseSync): void {
   if (!backlogColNames.has("run_id")) {
     db.exec("ALTER TABLE backlog ADD COLUMN run_id TEXT");
   }
+  if (!backlogColNames.has("project_id")) {
+    db.exec("ALTER TABLE backlog ADD COLUMN project_id TEXT");
+  }
+  if (!backlogColNames.has("workflow_id")) {
+    db.exec("ALTER TABLE backlog ADD COLUMN workflow_id TEXT");
+  }
 
   // Add columns to steps table for backwards compat
   const cols = db.prepare("PRAGMA table_info(steps)").all() as Array<{ name: string }>;
@@ -142,6 +148,9 @@ function migrate(db: DatabaseSync): void {
       ) WHERE run_number IS NULL
     `);
   }
+  if (!runColNames.has("project_id")) {
+    db.exec("ALTER TABLE runs ADD COLUMN project_id TEXT");
+  }
 }
 
 export function nextRunNumber(): number {
@@ -161,6 +170,8 @@ export interface BacklogEntry {
   status: string;
   priority: number;
   run_id: string | null;
+  project_id: string | null;
+  workflow_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -177,6 +188,6 @@ export interface ProjectEntry {
 export function getBacklog(): BacklogEntry[] {
   const db = getDb();
   return db.prepare(
-    "SELECT id, title, description, status, priority, run_id, created_at, updated_at FROM backlog ORDER BY priority ASC, created_at ASC"
+    "SELECT id, title, description, status, priority, run_id, project_id, workflow_id, created_at, updated_at FROM backlog ORDER BY priority ASC, created_at ASC"
   ).all() as unknown as BacklogEntry[];
 }

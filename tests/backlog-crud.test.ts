@@ -129,6 +129,39 @@ describe("US-002: backlog CRUD ops", () => {
     });
   });
 
+  describe("addBacklogEntry with projectId and workflowId", () => {
+    it("stores projectId and workflowId when provided", () => {
+      const entry = add({ title: "With project and workflow" });
+      // Manually update with project_id and workflow_id via the update function
+      const updated = updateBacklogEntry(entry.id, { project_id: "proj-123", workflow_id: "feature-dev" });
+      assert.ok(updated);
+      assert.equal(updated.project_id, "proj-123");
+      assert.equal(updated.workflow_id, "feature-dev");
+    });
+
+    it("defaults project_id and workflow_id to null", () => {
+      const entry = add({ title: "No project or workflow" });
+      assert.equal(entry.project_id, null);
+      assert.equal(entry.workflow_id, null);
+    });
+  });
+
+  describe("updateBacklogEntry with project_id and workflow_id", () => {
+    it("can update project_id", () => {
+      const entry = add({ title: "Update project_id" });
+      const updated = updateBacklogEntry(entry.id, { project_id: "new-project" });
+      assert.ok(updated);
+      assert.equal(updated.project_id, "new-project");
+    });
+
+    it("can update workflow_id", () => {
+      const entry = add({ title: "Update workflow_id" });
+      const updated = updateBacklogEntry(entry.id, { workflow_id: "bug-fix" });
+      assert.ok(updated);
+      assert.equal(updated.workflow_id, "bug-fix");
+    });
+  });
+
   describe("listBacklogEntries", () => {
     it("returns entries ordered by priority DESC, created_at ASC", async () => {
       const e1 = add({ title: "List-Low", priority: 1 });

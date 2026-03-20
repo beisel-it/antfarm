@@ -17,6 +17,8 @@ import {
   updateProject,
   deleteProject,
   getProject,
+  getProjectBacklog,
+  getProjectRuns,
 } from "../projects/index.js";
 import YAML from "yaml";
 import { runWorkflow } from "../installer/run.js";
@@ -160,6 +162,8 @@ export function startDashboard(port = 3333): http.Server {
             title: data.title,
             description: data.description,
             priority: data.priority,
+            projectId: data.projectId,
+            workflowId: data.workflowId,
           });
           return json(res, entry, 201);
         } catch {
@@ -183,7 +187,8 @@ export function startDashboard(port = 3333): http.Server {
             // ignore parse errors — body is optional
           }
 
-          // Default to first installed workflow if none specified
+          // Priority: entry.workflow_id → body workflowId → first installed workflow
+          if (!workflowId && entry.workflow_id) workflowId = entry.workflow_id;
           if (!workflowId) {
             const workflows = loadWorkflows();
             if (workflows.length === 0) {
@@ -193,7 +198,7 @@ export function startDashboard(port = 3333): http.Server {
           }
 
           const taskTitle = entry.title + (entry.description ? "\n\n" + entry.description : "");
-          const run = await runWorkflow({ workflowId, taskTitle });
+          const run = await runWorkflow({ workflowId, taskTitle, projectId: entry.project_id ?? undefined });
 
           updateBacklogEntry(entry.id, { status: "dispatched", run_id: run.id });
 
@@ -252,6 +257,22 @@ export function startDashboard(port = 3333): http.Server {
           return json(res, { error: "invalid JSON" }, 400);
         }
       });
+    }
+
+    const projectBacklogMatch = p.match(/^\/api\/projects\/([^/]+)\/backlog$/);
+    if (projectBacklogMatch && req.method === "GET") {
+      const id = projectBacklogMatch[1];
+      const project = getProject(id);
+      if (!project) return json(res, { error: "not found" }, 404);
+      return json(res, getProjectBacklog(id));
+    }
+
+    const projectRunsMatch = p.match(/^\/api\/projects\/([^/]+)\/runs$/);
+    if (projectRunsMatch && req.method === "GET") {
+      const id = projectRunsMatch[1];
+      const project = getProject(id);
+      if (!project) return json(res, { error: "not found" }, 404);
+      return json(res, getProjectRuns(id));
     }
 
     const projectIdMatch = p.match(/^\/api\/projects\/([^/]+)$/);

@@ -1,5 +1,8 @@
 import { SQLInputValue } from "node:sqlite";
 import { getDb, ProjectEntry } from "../db.js";
+import { listBacklogEntriesForProject } from "../backlog/ops.js";
+import type { BacklogEntry } from "../db.js";
+import type { RunInfo } from "../installer/status.js";
 
 export function addProject(fields: {
   name: string;
@@ -78,4 +81,15 @@ export function deleteProject(id: string): boolean {
   const db = getDb();
   const result = db.prepare("DELETE FROM projects WHERE id = ?").run(id);
   return (result as { changes: number }).changes > 0;
+}
+
+export function getProjectBacklog(projectId: string): BacklogEntry[] {
+  return listBacklogEntriesForProject(projectId);
+}
+
+export function getProjectRuns(projectId: string): RunInfo[] {
+  const db = getDb();
+  return db.prepare(
+    "SELECT * FROM runs WHERE project_id = ? ORDER BY created_at DESC"
+  ).all(projectId) as unknown as RunInfo[];
 }

@@ -4,4 +4,5 @@ export {
   deleteBacklogEntry,
   listBacklogEntries,
   getBacklogEntry,
+  listBacklogEntriesForProject,
 } from "./ops.js";

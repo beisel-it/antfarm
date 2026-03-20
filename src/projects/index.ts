@@ -1,1 +1,1 @@
-export { addProject, getProject, listProjects, updateProject, deleteProject } from "./ops.js";
+export { addProject, getProject, listProjects, updateProject, deleteProject, getProjectBacklog, getProjectRuns } from "./ops.js";
