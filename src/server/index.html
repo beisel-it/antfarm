@@ -507,6 +507,7 @@ function renderBacklogColumn() {
               ${priorityBadge}
             </span>
             <button class="backlog-dispatch-btn" onclick="dispatchBacklogEntry('${entry.id}',this)" ${isDispatched ? 'disabled' : ''}>${btnLabel}</button>
+            <button class="backlog-delete-btn" onclick="deleteBacklogEntry('${entry.id}',this)" title="Delete">✕</button>
           </div>
         </div>`;
       }).join('');
@@ -553,6 +554,19 @@ async function dispatchBacklogEntry(id, btn) {
     const msg = 'Dispatch failed: ' + (e instanceof Error ? e.message : String(e));
     if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; }
   }
+}
+
+async function deleteBacklogEntry(id, btn) {
+  if (!confirm('Delete this backlog item?')) return;
+  try {
+    const r = await fetch(API + '/api/backlog/' + id, { method: 'DELETE' });
+    const data = await r.json();
+    if (r.ok && data.ok) {
+      const card = btn.closest('[data-backlog-id]');
+      if (card) card.remove();
+      await loadBacklog();
+    }
+  } catch { /* ignore */ }
 }
 
 function renderBoard(wf, runs) {
