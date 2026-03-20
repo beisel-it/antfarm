@@ -749,7 +749,13 @@ function renderRunPanel(run) {
   const panel = document.getElementById('panel');
   const created = run.created_at ? parseTS(run.created_at)?.toLocaleString() || "" : '';
   const updated = run.updated_at ? parseTS(run.updated_at)?.toLocaleString() || "" : '';
-  const stepsHTML = (run.steps || []).map(s => {
+  // Build a map from step UUID to loop group index for quick lookup
+  const loopGroups = run.loopGroups || [];
+  const stepToGroupIdx = new Map();
+  loopGroups.forEach((g, idx) => {
+    (g.stepIds || []).forEach(sid => stepToGroupIdx.set(sid, idx));
+  });
+  function renderStepRow(s) {
     const st = s.status || 'waiting';
     const icon = stepIcons[st] || '○';
     const hasOutput = !!s.output;
@@ -767,7 +773,31 @@ function renderRunPanel(run) {
         <details style="margin-top:4px" onclick="event.stopPropagation()"><summary style="font-size:11px;color:var(--text-secondary);cursor:pointer;font-weight:500">Output</summary><pre style="margin-top:6px;padding:8px;background:var(--bg-code);border:1px solid var(--border);border-radius:4px;font-family:'Geist Mono',monospace;font-size:11px;white-space:pre-wrap;word-break:break-word;max-height:300px;overflow-y:auto">${esc(s.output)}</pre></details>
       </div>` : ''}
     </div>`;
-  }).join('');
+  }
+  const steps = run.steps || [];
+  const parts = [];
+  let currentGroupIdx = null;
+  steps.forEach((s, i) => {
+    const gIdx = stepToGroupIdx.has(s.id) ? stepToGroupIdx.get(s.id) : null;
+    // Detect group change
+    if (gIdx !== currentGroupIdx) {
+      // Close previous group if open
+      if (currentGroupIdx !== null) {
+        parts.push('</div></div>');
+      }
+      currentGroupIdx = gIdx;
+      // Open new group if entering a loop group
+      if (gIdx !== null) {
+        parts.push(`<div class="loop-group"><div class="loop-group-label">Repeating loop</div><div class="loop-group-steps">`);
+      }
+    }
+    parts.push(renderStepRow(s));
+  });
+  // Close any open group
+  if (currentGroupIdx !== null) {
+    parts.push('</div></div>');
+  }
+  const stepsHTML = parts.join('');
   panel.innerHTML = `
     <button class="panel-close" onclick="closePanel()">✕</button>
     <h2>${run.workflow_id}</h2>
