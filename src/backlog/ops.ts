@@ -7,6 +7,9 @@ export function addBacklogEntry(fields: {
   priority?: number;
   projectId?: string;
   workflowId?: string;
+  notes?: string;
+  tags?: string;
+  acceptanceCriteria?: string;
 }): BacklogEntry {
   const db = getDb();
   const id = crypto.randomUUID();
@@ -15,17 +18,20 @@ export function addBacklogEntry(fields: {
   const description = fields.description ?? null;
   const projectId = fields.projectId ?? null;
   const workflowId = fields.workflowId ?? null;
+  const notes = fields.notes ?? null;
+  const tags = fields.tags ?? null;
+  const acceptanceCriteria = fields.acceptanceCriteria ?? null;
 
   db.prepare(
-    "INSERT INTO backlog (id, title, description, status, priority, project_id, workflow_id, created_at, updated_at) VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?)"
-  ).run(id, fields.title, description, priority, projectId, workflowId, now, now);
+    "INSERT INTO backlog (id, title, description, status, priority, project_id, workflow_id, notes, tags, acceptance_criteria, created_at, updated_at) VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?)"
+  ).run(id, fields.title, description, priority, projectId, workflowId, notes, tags, acceptanceCriteria, now, now);
 
   return getBacklogEntry(id)!;
 }
 
 export function updateBacklogEntry(
   id: string,
-  updates: Partial<Pick<BacklogEntry, "title" | "description" | "status" | "priority" | "run_id" | "project_id" | "workflow_id">>
+  updates: Partial<Pick<BacklogEntry, "title" | "description" | "status" | "priority" | "run_id" | "project_id" | "workflow_id" | "notes" | "tags" | "acceptance_criteria">>
 ): BacklogEntry | null {
   const db = getDb();
   const existing = getBacklogEntry(id);
@@ -63,6 +69,18 @@ export function updateBacklogEntry(
     setClauses.push("project_id = ?");
     values.push(updates.project_id);
   }
+  if (updates.notes !== undefined) {
+    setClauses.push("notes = ?");
+    values.push(updates.notes);
+  }
+  if (updates.tags !== undefined) {
+    setClauses.push("tags = ?");
+    values.push(updates.tags);
+  }
+  if (updates.acceptance_criteria !== undefined) {
+    setClauses.push("acceptance_criteria = ?");
+    values.push(updates.acceptance_criteria);
+  }
 
   if (setClauses.length === 0) return existing;
 
@@ -86,14 +104,14 @@ export function listBacklogEntries(filters?: { workflow_id?: string }): BacklogE
   if (filters?.workflow_id) {
     return db
       .prepare(
-        "SELECT id, title, description, status, priority, run_id, project_id, workflow_id, created_at, updated_at FROM backlog WHERE workflow_id = ? ORDER BY priority DESC, created_at ASC"
+        "SELECT id, title, description, status, priority, run_id, project_id, workflow_id, notes, tags, acceptance_criteria, created_at, updated_at FROM backlog WHERE workflow_id = ? ORDER BY priority DESC, created_at ASC"
       )
       .all(filters.workflow_id) as unknown as BacklogEntry[];
   }
 
   return db
     .prepare(
-      "SELECT id, title, description, status, priority, run_id, project_id, workflow_id, created_at, updated_at FROM backlog ORDER BY priority DESC, created_at ASC"
+      "SELECT id, title, description, status, priority, run_id, project_id, workflow_id, notes, tags, acceptance_criteria, created_at, updated_at FROM backlog ORDER BY priority DESC, created_at ASC"
     )
     .all() as unknown as BacklogEntry[];
 }
@@ -102,7 +120,7 @@ export function getBacklogEntry(id: string): BacklogEntry | null {
   const db = getDb();
   const row = db
     .prepare(
-      "SELECT id, title, description, status, priority, run_id, project_id, workflow_id, created_at, updated_at FROM backlog WHERE id = ?"
+      "SELECT id, title, description, status, priority, run_id, project_id, workflow_id, notes, tags, acceptance_criteria, created_at, updated_at FROM backlog WHERE id = ?"
     )
     .get(id) as unknown as BacklogEntry | undefined;
   return row ?? null;
@@ -112,7 +130,7 @@ export function listBacklogEntriesForProject(projectId: string): BacklogEntry[] 
   const db = getDb();
   return db
     .prepare(
-      "SELECT id, title, description, status, priority, run_id, project_id, workflow_id, created_at, updated_at FROM backlog WHERE project_id = ? ORDER BY priority DESC, created_at ASC"
+      "SELECT id, title, description, status, priority, run_id, project_id, workflow_id, notes, tags, acceptance_criteria, created_at, updated_at FROM backlog WHERE project_id = ? ORDER BY priority DESC, created_at ASC"
     )
     .all(projectId) as unknown as BacklogEntry[];
 }
