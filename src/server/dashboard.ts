@@ -11,6 +11,13 @@ import {
   deleteBacklogEntry,
   getBacklogEntry,
 } from "../backlog/index.js";
+import {
+  listProjects,
+  addProject,
+  updateProject,
+  deleteProject,
+  getProject,
+} from "../projects/index.js";
 import YAML from "yaml";
 import { runWorkflow } from "../installer/run.js";
 
@@ -220,6 +227,59 @@ export function startDashboard(port = 3333): http.Server {
       const entry = findBacklogEntryById(id);
       if (!entry) return json(res, { error: "not found" }, 404);
       deleteBacklogEntry(entry.id);
+      return json(res, { ok: true });
+    }
+
+    // Projects API
+    if (p === "/api/projects" && req.method === "GET") {
+      return json(res, listProjects());
+    }
+
+    if (p === "/api/projects" && req.method === "POST") {
+      return readBody(req, (body) => {
+        try {
+          const data = JSON.parse(body);
+          if (!data.name || typeof data.name !== "string") {
+            return json(res, { error: "name is required" }, 400);
+          }
+          const project = addProject({
+            name: data.name,
+            gitRepoPath: data.gitRepoPath,
+            githubRepoUrl: data.githubRepoUrl,
+          });
+          return json(res, project, 201);
+        } catch {
+          return json(res, { error: "invalid JSON" }, 400);
+        }
+      });
+    }
+
+    const projectIdMatch = p.match(/^\/api\/projects\/([^/]+)$/);
+
+    if (projectIdMatch && req.method === "GET") {
+      const id = projectIdMatch[1];
+      const project = getProject(id);
+      return project ? json(res, project) : json(res, { error: "not found" }, 404);
+    }
+
+    if (projectIdMatch && req.method === "PATCH") {
+      const id = projectIdMatch[1];
+      return readBody(req, (body) => {
+        try {
+          const data = JSON.parse(body);
+          const updated = updateProject(id, data);
+          if (!updated) return json(res, { error: "not found" }, 404);
+          return json(res, updated);
+        } catch {
+          return json(res, { error: "invalid JSON" }, 400);
+        }
+      });
+    }
+
+    if (projectIdMatch && req.method === "DELETE") {
+      const id = projectIdMatch[1];
+      const deleted = deleteProject(id);
+      if (!deleted) return json(res, { error: "not found" }, 404);
       return json(res, { ok: true });
     }
 
