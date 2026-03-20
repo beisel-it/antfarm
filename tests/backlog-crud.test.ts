@@ -30,7 +30,12 @@ const createdIds: string[] = [];
 
 // Helper that auto-tracks created IDs for cleanup
 function add(fields: { title: string; description?: string; priority?: number; workflow_id?: string }) {
-  const e = addBacklogEntry({ ...fields, title: `${prefix}-${fields.title}` });
+  const e = addBacklogEntry({
+    title: `${prefix}-${fields.title}`,
+    description: fields.description,
+    priority: fields.priority,
+    workflowId: fields.workflow_id,
+  });
   createdIds.push(e.id);
   return e;
 }

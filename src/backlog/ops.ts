@@ -63,10 +63,6 @@ export function updateBacklogEntry(
     setClauses.push("project_id = ?");
     values.push(updates.project_id);
   }
-  if (updates.workflow_id !== undefined) {
-    setClauses.push("workflow_id = ?");
-    values.push(updates.workflow_id);
-  }
 
   if (setClauses.length === 0) return existing;
 
