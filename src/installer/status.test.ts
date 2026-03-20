@@ -111,14 +111,14 @@ describe("stopWorkflow", () => {
     createTestRun({
       runId,
       workflowId: "test-wf-2",
-      status: "completed",
+      status: "done",
       steps: [{ stepId: "plan", status: "done" }],
     });
 
     const result = await stopWorkflow(runId);
     assert.equal(result.status, "already_done");
     if (result.status !== "already_done") return;
-    assert.ok(result.message.includes("completed"));
+    assert.ok(result.message.includes("done"));
   });
 
   it("returns already_done for an already cancelled run", async () => {
