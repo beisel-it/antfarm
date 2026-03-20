@@ -187,6 +187,12 @@ select:focus{outline:none;border-color:#8ECFC0}
 .backlog-delete-btn{background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:12px;padding:2px 5px;border-radius:3px;line-height:1}
 .backlog-delete-btn:hover{color:var(--accent-orange);background:var(--accent-orange-subtle)}
 
+/* ── Status filter buttons ─────────────────────────────────────── */
+.status-filter-bar{display:flex;align-items:center;gap:6px}
+.status-filter-btn{background:none;border:1px solid rgba(255,255,255,.2);border-radius:6px;color:rgba(255,255,255,.7);cursor:pointer;padding:4px 10px;font-size:12px;font-weight:500;line-height:1.4;transition:border-color .15s,color .15s}
+.status-filter-btn:hover{border-color:rgba(255,255,255,.5);color:#fff}
+.status-filter-btn.active{border-color:var(--accent-green);color:#fff;background:rgba(107,127,59,.35)}
+
 /* ── Misc ──────────────────────────────────────────────────────── */
 .empty{color:var(--text-secondary);font-size:12px;text-align:center;padding:24px 8px}
 .refresh-note{color:rgba(255,255,255,.6);font-size:11px;margin-left:auto}
@@ -249,6 +255,12 @@ select:focus{outline:none;border-color:#8ECFC0}
 <header>
   <h1><span>antfarm</span> dashboard</h1>
   <select id="wf-select"><option value="">Loading...</option></select>
+  <div class="status-filter-bar">
+    <button class="status-filter-btn" data-status="running">running</button>
+    <button class="status-filter-btn" data-status="done">done</button>
+    <button class="status-filter-btn" data-status="failed">failed</button>
+    <button class="status-filter-btn" data-status="cancelled">cancelled</button>
+  </div>
   <button class="theme-toggle" id="theme-toggle" title="Toggle light/dark mode" aria-label="Toggle light/dark mode">☀️</button>
   <div class="medic-badge" id="medic-badge" onclick="toggleMedicPanel()" title="Medic watchdog status">
     <span class="medic-dot unknown" id="medic-dot"></span>
@@ -273,6 +285,41 @@ let openRunId = null;
 let openRunRefreshInterval = null;
 let backlogEntries = [];
 let projects = [];
+
+// ── Status filters ───────────────────────────────────────────────
+const STATUS_FILTER_KEY = 'antfarm-status-filter';
+const STATUS_FILTER_DEFAULT = ['running'];
+let activeStatuses = loadStatusFilters();
+
+function loadStatusFilters() {
+  try {
+    const stored = localStorage.getItem(STATUS_FILTER_KEY);
+    if (stored) return JSON.parse(stored);
+  } catch { /* ignore */ }
+  return STATUS_FILTER_DEFAULT.slice();
+}
+
+function saveStatusFilters() {
+  localStorage.setItem(STATUS_FILTER_KEY, JSON.stringify(activeStatuses));
+}
+
+function initStatusFilterButtons() {
+  document.querySelectorAll('.status-filter-btn').forEach(btn => {
+    const status = btn.getAttribute('data-status');
+    if (activeStatuses.includes(status)) btn.classList.add('active');
+    btn.addEventListener('click', () => {
+      if (activeStatuses.includes(status)) {
+        activeStatuses = activeStatuses.filter(s => s !== status);
+        btn.classList.remove('active');
+      } else {
+        activeStatuses = [...activeStatuses, status];
+        btn.classList.add('active');
+      }
+      saveStatusFilters();
+      if (currentWf) loadRuns();
+    });
+  });
+}
 
 function clearOpenRunRefresh() {
   if (openRunRefreshInterval) {
@@ -606,7 +653,10 @@ function renderBoard(wf, runs) {
   const columns = {};
   wf.steps.forEach(s => { columns[s.id] = []; });
 
-  runs.forEach(run => {
+  // Filter runs by active status filters (client-side)
+  const filteredRuns = runs.filter(run => activeStatuses.includes(run.status));
+
+  filteredRuns.forEach(run => {
     const stepId = getActiveStepId(run);
     const col = stepId && columns[stepId] !== undefined ? stepId : wf.steps[wf.steps.length - 1]?.id;
     if (col && columns[col]) columns[col].push(run);
@@ -806,6 +856,7 @@ async function loadStories(runId) {
 }
 
 document.getElementById('wf-select').addEventListener('change', e => selectWorkflow(e.target.value));
+initStatusFilterButtons();
 loadWorkflows();
 loadProjects().then(() => {
   if (!currentWf) document.getElementById('board').innerHTML = renderProjectsColumn() + '<div class="empty" style="margin:auto">Select a workflow</div>';
