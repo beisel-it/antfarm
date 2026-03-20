@@ -140,6 +140,8 @@ select:focus{outline:none;border-color:#8ECFC0}
 .card-meta{font-size:11px;color:var(--text-secondary);display:flex;justify-content:space-between;align-items:center}
 .card.done{border-left:3px solid var(--accent-green)}
 .card.failed,.card.error{border-left:3px solid var(--accent-orange)}
+.card-cancel-btn{background:none;border:1px solid var(--accent-orange);border-radius:4px;color:var(--accent-orange);cursor:pointer;font-size:10px;font-weight:600;padding:2px 6px;line-height:1.4;flex-shrink:0;transition:background .15s,color .15s}
+.card-cancel-btn:hover{background:var(--accent-orange);color:#fff}
 
 /* ── Overlay / Panel ───────────────────────────────────────────── */
 .overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:var(--overlay);z-index:100;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .15s}
@@ -556,6 +558,22 @@ async function dispatchBacklogEntry(id, btn) {
   }
 }
 
+async function cancelRun(id, event) {
+  event.stopPropagation();
+  if (!confirm('Cancel this run?')) return;
+  try {
+    const r = await fetch(API + `/api/runs/${id}/cancel`, { method: 'POST' });
+    const data = await r.json();
+    if (r.ok && data.ok) {
+      await loadRuns();
+    } else {
+      alert('Cancel failed: ' + (data.error || 'unknown error'));
+    }
+  } catch (e) {
+    alert('Cancel failed: ' + (e instanceof Error ? e.message : String(e)));
+  }
+}
+
 async function deleteBacklogEntry(id, btn) {
   if (!confirm('Delete this backlog item?')) return;
   try {
@@ -587,15 +605,18 @@ function renderBoard(wf, runs) {
       : cards.map(run => {
           const isDone = run.status === 'done';
           const isFailed = run.status === 'failed' || run.status === 'error';
+          const isRunning = run.status === 'running';
           const cls = isDone ? 'done' : isFailed ? 'failed' : '';
           const badge = `badge-${run.status}`;
           const time = run.updated_at ? parseTS(run.updated_at)?.toLocaleString() || "" : '';
           const title = run.task.length > 60 ? run.task.slice(0, 57) + '…' : run.task;
+          const cancelBtn = isRunning ? `<button class="card-cancel-btn" onclick="cancelRun('${run.id}',event)" title="Cancel this run">Cancel</button>` : '';
           return `<div class="card ${cls}" onclick="openRun('${run.id}')">
             <div class="card-title" title="${run.task.replace(/"/g, '&quot;')}">${title}</div>
             <div class="card-meta">
               <span class="badge ${badge}">${run.status}</span>
               <span>${time}</span>
+              ${cancelBtn}
             </div>
           </div>`;
         }).join('');

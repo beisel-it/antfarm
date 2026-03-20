@@ -24,6 +24,7 @@ import YAML from "yaml";
 import { runWorkflow } from "../installer/run.js";
 
 import type { RunInfo, StepInfo } from "../installer/status.js";
+import { stopWorkflow } from "../installer/status.js";
 import { getRunEvents } from "../installer/events.js";
 import { getMedicStatus, getRecentMedicChecks } from "../medic/medic.js";
 
@@ -128,6 +129,16 @@ export function startDashboard(port = 3333, deps: DashboardDeps = {}): http.Serv
         "SELECT * FROM stories WHERE run_id = ? ORDER BY story_index ASC"
       ).all(storiesMatch[1]);
       return json(res, stories);
+    }
+
+    const cancelMatch = p.match(/^\/api\/runs\/([^/]+)\/cancel$/);
+    if (cancelMatch && req.method === "POST") {
+      stopWorkflow(cancelMatch[1]).then((result) => {
+        if (result.status === "not_found") return json(res, { error: result.message }, 404);
+        if (result.status === "already_done") return json(res, { error: result.message }, 409);
+        return json(res, { ok: true, runId: result.runId });
+      }).catch(() => json(res, { error: "internal error" }, 500));
+      return;
     }
 
     const runMatch = p.match(/^\/api\/runs\/(.+)$/);
