@@ -83,4 +83,45 @@ describe('dashboard status filter UI', () => {
       'Expected localStorage.setItem call for STATUS_FILTER_KEY to persist state on toggle'
     );
   });
+
+  // US-004: Verify 'done' is the terminal run status in frontend logic
+  it('renderBoard checks run.status === "done" to apply done styling (not "completed")', () => {
+    assert.ok(
+      html.includes("run.status === 'done'"),
+      'Expected renderBoard to check run.status === \'done\' for done card styling'
+    );
+    assert.ok(
+      !html.includes("run.status === 'completed'"),
+      'Expected renderBoard NOT to check run.status === \'completed\' — "completed" is not a valid run status'
+    );
+  });
+
+  it('.card.done CSS class is applied when run status is "done"', () => {
+    // Verify that the CSS class 'done' on a card is wired to isDone check
+    assert.ok(
+      html.includes('.card.done'),
+      'Expected .card.done CSS rule to style done runs with green border'
+    );
+    // Verify the isDone variable flows to the card class
+    assert.ok(
+      html.includes("isDone ? 'done'"),
+      'Expected isDone ? \'done\' logic to set the card CSS class'
+    );
+  });
+
+  it('does not use "completed" as a run status label in filter buttons or card classes', () => {
+    // The only acceptable use of "completed" in the HTML is SSE event names and badge backward-compat CSS
+    // There must be NO data-status="completed" button
+    assert.ok(
+      !html.includes('data-status="completed"'),
+      'Expected no data-status="completed" filter button — terminal status is "done"'
+    );
+  });
+
+  it('done status filter button is present and uses status value "done"', () => {
+    assert.ok(
+      html.includes('data-status="done"'),
+      'Expected status filter button with data-status="done" to be present'
+    );
+  });
 });
