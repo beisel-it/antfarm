@@ -129,6 +129,14 @@ export async function runWorkflow(params: {
   notifyUrl?: string;
   projectId?: string;
 }): Promise<{ id: string; runNumber: number; workflowId: string; task: string; status: string }> {
+  // Guard: reject if project already has an active run
+  if (params.projectId) {
+    const activeRun = getActiveRunForProject(params.projectId);
+    if (activeRun) {
+      throw new Error(`Project already has an active run: #${activeRun.run_number} (${activeRun.id})`);
+    }
+  }
+
   const workflowDir = resolveWorkflowDir(params.workflowId);
   const workflow = await loadWorkflowSpec(workflowDir);
   const db = getDb();
