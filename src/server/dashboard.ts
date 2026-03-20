@@ -25,6 +25,10 @@ import { runWorkflow, getActiveRunForProject } from "../installer/run.js";
 
 import type { RunInfo, StepInfo } from "../installer/status.js";
 import { stopWorkflow } from "../installer/status.js";
+import { computeLoopGroups } from "./loop-groups.js";
+import type { LoopGroup } from "./loop-groups.js";
+export type { LoopGroup };
+export { computeLoopGroups };
 import { getRunEvents } from "../installer/events.js";
 import { getMedicStatus, getRecentMedicChecks } from "../medic/medic.js";
 
@@ -79,12 +83,13 @@ function getRuns(workflowId?: string, statusFilter?: string[]): Array<RunInfo & 
   });
 }
 
-function getRunById(id: string): (RunInfo & { steps: StepInfo[] }) | null {
+function getRunById(id: string): (RunInfo & { steps: StepInfo[]; loopGroups: LoopGroup[] }) | null {
   const db = getDb();
   const run = db.prepare("SELECT * FROM runs WHERE id = ?").get(id) as RunInfo | undefined;
   if (!run) return null;
   const steps = db.prepare("SELECT * FROM steps WHERE run_id = ? ORDER BY step_index ASC").all(run.id) as StepInfo[];
-  return { ...run, steps };
+  const loopGroups = computeLoopGroups(steps);
+  return { ...run, steps, loopGroups };
 }
 
 function json(res: http.ServerResponse, data: unknown, status = 200) {
