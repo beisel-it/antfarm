@@ -21,7 +21,7 @@ const HTML_PATH = path.join(
 );
 
 let server: http.Server;
-const PORT = 14099;
+const PORT = 14098;
 const BASE = `http://localhost:${PORT}`;
 
 async function req(
