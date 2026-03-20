@@ -50,6 +50,7 @@ let runDone: string;
 let runFailed: string;
 let runCancelled: string;
 let runError: string;
+let runCompleted: string;
 
 before(async () => {
   const db = getDb();
@@ -61,6 +62,7 @@ before(async () => {
   runFailed = randomUUID();
   runCancelled = randomUUID();
   runError = randomUUID();
+  runCompleted = randomUUID();
 
   seedRun(runRunning, "running");
   seedRun(runPending, "pending");
@@ -68,6 +70,9 @@ before(async () => {
   seedRun(runFailed, "failed");
   seedRun(runCancelled, "cancelled");
   seedRun(runError, "error");
+  // Deliberately seed a 'completed' run to test that the API filter does NOT
+  // return it when filtering for 'done' (exact match, not alias)
+  seedRun(runCompleted, "completed");
 
   server = startDashboard(PORT);
   await new Promise<void>((resolve) => server.once("listening", resolve));
@@ -85,7 +90,7 @@ describe("US-001: GET /api/runs status filter", () => {
     assert.equal(status, 200);
     const runs = data as Array<{ id: string; status: string }>;
     assert.ok(Array.isArray(runs));
-    assert.equal(runs.length, 6, "Should return all 6 seeded runs");
+    assert.equal(runs.length, 7, "Should return all 7 seeded runs (including 'completed' legacy run)");
   });
 
   it("returns only running runs when status=running", async () => {
@@ -126,7 +131,7 @@ describe("US-001: GET /api/runs status filter", () => {
     assert.equal(status, 200);
     const runs = data as Array<{ id: string; status: string }>;
     assert.ok(Array.isArray(runs));
-    assert.equal(runs.length, 6, "Empty status param should return all runs");
+    assert.equal(runs.length, 7, "Empty status param should return all runs (including 'completed' legacy run)");
   });
 
   it("filters globally (no workflow param) when only status provided", async () => {
@@ -154,5 +159,40 @@ describe("US-001: GET /api/runs status filter", () => {
     const runs = data as unknown[];
     assert.ok(Array.isArray(runs));
     assert.equal(runs.length, 0);
+  });
+});
+
+describe("US-003: GET /api/runs status=done does NOT return 'completed' legacy runs", () => {
+  it("does not return 'completed' runs when filtering for status=done", async () => {
+    // The DB migration (US-002) should handle backfilling 'completed' → 'done',
+    // but we test that the API filter uses exact matching — a run that somehow
+    // has status='completed' in the DB does NOT appear when querying ?status=done.
+    const { status, data } = await req(`/api/runs?workflow=${WORKFLOW_ID}&status=done`);
+    assert.equal(status, 200);
+    const runs = data as Array<{ id: string; status: string }>;
+    assert.ok(Array.isArray(runs));
+
+    // The 'done' run MUST appear
+    const doneRun = runs.find((r) => r.id === runDone);
+    assert.ok(doneRun, "The run with status='done' should appear in status=done filter");
+    assert.equal(doneRun.status, "done");
+
+    // The 'completed' run MUST NOT appear (no alias — exact DB match only)
+    const completedRun = runs.find((r) => r.id === runCompleted);
+    assert.ok(!completedRun, "The run with status='completed' must NOT appear when filtering for status=done");
+
+    // Verify none of the returned runs have status='completed'
+    const completedStatuses = runs.filter((r) => r.status === "completed");
+    assert.equal(completedStatuses.length, 0, "No runs with status='completed' should appear in status=done filter");
+  });
+
+  it("returns only runs with status='done' when filtering for status=done", async () => {
+    const { status, data } = await req(`/api/runs?workflow=${WORKFLOW_ID}&status=done`);
+    assert.equal(status, 200);
+    const runs = data as Array<{ id: string; status: string }>;
+    assert.ok(Array.isArray(runs));
+    assert.equal(runs.length, 1, "Exactly one run has status='done'");
+    assert.equal(runs[0].id, runDone);
+    assert.equal(runs[0].status, "done");
   });
 });
