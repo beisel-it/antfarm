@@ -42,6 +42,9 @@
 
   /* Pre/code */
   --bg-code: #FAF8F5;
+
+  /* Loop groups */
+  --loop-border: var(--accent-teal);
 }
 
 [data-theme="dark"] {
@@ -166,6 +169,16 @@ select:focus{outline:none;border-color:#8ECFC0}
 .step-name{font-size:13px;font-weight:500;color:var(--text-primary);flex:1}
 .step-agent{font-size:11px;color:var(--text-secondary);font-family:'Geist Mono',monospace}
 .step-status{font-size:11px;text-transform:uppercase;font-weight:600}
+
+/* ── Loop Groups ───────────────────────────────────────────────── */
+.loop-group{position:relative;border:2px solid var(--accent-teal);border-radius:8px;padding:10px 10px 10px 10px;margin-bottom:0;background:var(--accent-teal-subtle)}
+.loop-group-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--accent-teal);margin-bottom:6px;padding-left:4px;display:flex;align-items:center;gap:6px}
+.loop-group-label::before{content:'↻';font-size:13px;font-weight:400}
+.loop-group-steps{display:flex;flex-direction:column;gap:6px;padding-left:12px}
+.loop-badge-wrapper{display:flex;justify-content:flex-start;align-items:center;padding-left:8px;margin:-2px 0}
+.loop-badge{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--bg-surface,#fff);border:2px solid var(--accent-teal);position:relative;overflow:hidden;flex-shrink:0}
+.loop-badge svg{width:28px;height:28px}
+.loop-badge-text{position:absolute;font-size:8px;font-weight:700;color:var(--accent-teal);z-index:1;line-height:1}
 
 /* ── Badges ────────────────────────────────────────────────────── */
 .badge{font-size:10px;font-weight:600;padding:2px 6px;border-radius:4px;text-transform:uppercase}
@@ -714,7 +727,8 @@ function parseTS(ts) { if (!ts) return null; if (!ts.endsWith('Z') && !ts.includ
 
 async function openRun(id) {
   const run = await fetchJSON(`/api/runs/${id}`);
-  renderRunPanel(run);
+  const stories = await fetchJSON(`/api/runs/${id}/stories`).catch(() => []);
+  renderRunPanel(run, stories || []);
   await Promise.all([loadStories(id), loadActivity(id)]);
   openRunId = id;
   document.getElementById('overlay').classList.add('open');
@@ -725,18 +739,39 @@ async function refreshOpenRunPanel() {
   if (!openRunId) return;
   try {
     const run = await fetchJSON(`/api/runs/${openRunId}`);
-    renderRunPanel(run);
+    const stories = await fetchJSON(`/api/runs/${openRunId}/stories`).catch(() => []);
+    renderRunPanel(run, stories || []);
     await Promise.all([loadStories(openRunId), loadActivity(openRunId)]);
   } catch {
     closePanel();
   }
 }
 
-function renderRunPanel(run) {
+function renderLoopBadge(stories) {
+  const list = stories || [];
+  const total = list.length;
+  if (total === 0) {
+    return `<div class="loop-badge-wrapper"><div class="loop-badge" title="Loop progress"><div class="loop-badge-text">0%</div></div></div>`;
+  }
+  const done = list.filter(s => s.status === 'done').length;
+  const pct = Math.round((done / total) * 100);
+  return `<div class="loop-badge-wrapper"><div class="loop-badge" style="background:conic-gradient(var(--accent-teal) 0% ${pct}%,var(--accent-muted) ${pct}% 100%)" title="Loop progress: ${done}/${total}"><div class="loop-badge-text">${done}/${total}</div></div></div>`;
+}
+function renderRunPanel(run, stories) {
+  stories = stories || [];
   const panel = document.getElementById('panel');
   const created = run.created_at ? parseTS(run.created_at)?.toLocaleString() || "" : '';
   const updated = run.updated_at ? parseTS(run.updated_at)?.toLocaleString() || "" : '';
-  const stepsHTML = (run.steps || []).map(s => {
+  // Build a map from step UUID to loop group index for quick lookup
+  const loopGroups = run.loopGroups || [];
+  const stepToGroupIdx = new Map();
+  // Build a set of verify step IDs so we can inject the badge before them
+  const verifyStepIds = new Set();
+  loopGroups.forEach((g, idx) => {
+    (g.stepIds || []).forEach(sid => stepToGroupIdx.set(sid, idx));
+    if (g.verifyStepId) verifyStepIds.add(g.verifyStepId);
+  });
+  function renderStepRow(s) {
     const st = s.status || 'waiting';
     const icon = stepIcons[st] || '○';
     const hasOutput = !!s.output;
@@ -754,7 +789,35 @@ function renderRunPanel(run) {
         <details style="margin-top:4px" onclick="event.stopPropagation()"><summary style="font-size:11px;color:var(--text-secondary);cursor:pointer;font-weight:500">Output</summary><pre style="margin-top:6px;padding:8px;background:var(--bg-code);border:1px solid var(--border);border-radius:4px;font-family:'Geist Mono',monospace;font-size:11px;white-space:pre-wrap;word-break:break-word;max-height:300px;overflow-y:auto">${esc(s.output)}</pre></details>
       </div>` : ''}
     </div>`;
-  }).join('');
+  }
+  const steps = run.steps || [];
+  const parts = [];
+  let currentGroupIdx = null;
+  steps.forEach((s, i) => {
+    const gIdx = stepToGroupIdx.has(s.id) ? stepToGroupIdx.get(s.id) : null;
+    // Detect group change
+    if (gIdx !== currentGroupIdx) {
+      // Close previous group if open
+      if (currentGroupIdx !== null) {
+        parts.push('</div></div>');
+      }
+      currentGroupIdx = gIdx;
+      // Open new group if entering a loop group
+      if (gIdx !== null) {
+        parts.push(`<div class="loop-group"><div class="loop-group-label">Repeating loop</div><div class="loop-group-steps">`);
+      }
+    }
+    // Inject badge before verify step (between implement and verify rows)
+    if (verifyStepIds.has(s.id)) {
+      parts.push(renderLoopBadge(stories));
+    }
+    parts.push(renderStepRow(s));
+  });
+  // Close any open group
+  if (currentGroupIdx !== null) {
+    parts.push('</div></div>');
+  }
+  const stepsHTML = parts.join('');
   panel.innerHTML = `
     <button class="panel-close" onclick="closePanel()">✕</button>
     <h2>${run.workflow_id}</h2>
@@ -827,6 +890,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closePanel()
 
 async function loadStories(runId) {
   const stories = await fetchJSON(`/api/runs/${runId}/stories`);
+  window._lastStories = stories || [];
   const panel = document.getElementById('stories-panel');
   if (!stories || stories.length === 0) { panel.innerHTML = ''; return; }
   const done = stories.filter(s => s.status === 'done').length;
