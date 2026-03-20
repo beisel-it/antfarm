@@ -1064,7 +1064,7 @@ function advancePipeline(runId: string): { advanced: boolean; runCompleted: bool
     return { advanced: true, runCompleted: false };
   } else {
     db.prepare(
-      "UPDATE runs SET status = 'completed', updated_at = datetime('now') WHERE id = ?"
+      "UPDATE runs SET status = 'done', updated_at = datetime('now') WHERE id = ?"
     ).run(runId);
     emitEvent({ ts: new Date().toISOString(), event: "run.completed", runId, workflowId: wfId });
     logger.info("Run completed", { runId, workflowId: wfId });

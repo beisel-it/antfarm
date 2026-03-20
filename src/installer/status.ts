@@ -105,7 +105,7 @@ export async function stopWorkflow(query: string): Promise<StopWorkflowResult> {
     };
   }
 
-  if (run.status === "completed" || run.status === "cancelled") {
+  if (run.status === "done" || run.status === "cancelled") {
     return {
       status: "already_done",
       message: `Run ${run.id.slice(0, 8)} is already "${run.status}".`,
