@@ -4,7 +4,8 @@ import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { getDb, getDbPath, getBacklog, BacklogEntry } from "./db.js";
+import { getDb, getDbPath, getBacklog } from "../dist/db.js";
+import type { BacklogEntry } from "../dist/db.js";
 
 describe("Database Migration", () => {
   const testDbPath = path.join(os.tmpdir(), `antfarm-test-${Date.now()}.db`);

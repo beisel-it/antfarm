@@ -136,4 +136,30 @@ describe("US-001: backlog table migration", () => {
       assert.ok("updated_at" in e, "has updated_at");
     }
   });
+
+  it("backlog table has project_id column (nullable)", () => {
+    const db = getDb();
+    const columns = db.prepare("PRAGMA table_info(backlog)").all() as Array<{
+      name: string;
+      type: string;
+      notnull: number;
+      dflt_value: string | null;
+    }>;
+    const colMap = new Map(columns.map(c => [c.name, c]));
+    assert.ok(colMap.has("project_id"), "project_id column exists");
+    assert.equal(colMap.get("project_id")!.notnull, 0, "project_id is nullable");
+  });
+
+  it("backlog table has workflow_id column (nullable)", () => {
+    const db = getDb();
+    const columns = db.prepare("PRAGMA table_info(backlog)").all() as Array<{
+      name: string;
+      type: string;
+      notnull: number;
+      dflt_value: string | null;
+    }>;
+    const colMap = new Map(columns.map(c => [c.name, c]));
+    assert.ok(colMap.has("workflow_id"), "workflow_id column exists");
+    assert.equal(colMap.get("workflow_id")!.notnull, 0, "workflow_id is nullable");
+  });
 });

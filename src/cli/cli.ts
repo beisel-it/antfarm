@@ -123,11 +123,19 @@ function printUsage() {
       "antfarm step stories <run-id>       List stories for a run",
       "",
       "antfarm backlog list                 List all backlog entries",
-      "antfarm backlog add <title> [--description <text>] [--priority <n>] [--workflow <id>]",
+      "antfarm backlog add <title> [--description <text>] [--priority <n>] [--project <id>] [--workflow <id>]",
       "                                     Add entry to backlog queue",
       "antfarm backlog update <id>          Update a backlog entry",
       "                                     [--title <t>] [--description <d>] [--status <s>] [--priority <n>] [--workflow <id>]",
       "antfarm backlog delete <id>          Delete a backlog entry",
+      "",
+      "antfarm project list [--json]        List all projects",
+      "antfarm project add <name> [--git-repo-path <path>] [--github-repo-url <url>]",
+      "                                     Add a project",
+      "antfarm project update <id-prefix>   Update a project",
+      "                                     [--name <n>] [--git-repo-path <path>] [--github-repo-url <url>]",
+      "antfarm project delete <id-prefix>   Delete a project",
+      "antfarm project show <id-prefix> [--json]  Show project details with backlog and runs",
       "",
       "antfarm medic install                Install medic watchdog cron",
       "antfarm medic uninstall              Remove medic cron",
@@ -515,8 +523,9 @@ async function main() {
 
       // Parse title from target and any additional args
       const titleParts: string[] = [target];
-      const flags: { description?: string; priority?: number; workflow_id?: string } = {};
-      
+      const flags: { description?: string; priority?: number; project?: string; workflow?: string } = {};
+
+
       // Parse remaining args for flags
       let i = 3;
       while (i < args.length) {
@@ -527,12 +536,12 @@ async function main() {
           const p = parseInt(args[i + 1], 10);
           if (!Number.isNaN(p)) flags.priority = p;
           i += 2;
-        } else if (args[i] === "--workflow" && args[i + 1]) {
-          flags.workflow_id = args[i + 1];
+        } else if (args[i] === "--project" && args[i + 1]) {
+          flags.project = args[i + 1];
           i += 2;
-        } else if (args[i] === "--workflow") {
-          writeStderr("Missing workflow id after --workflow.\n");
-          process.exit(1);
+        } else if (args[i] === "--workflow" && args[i + 1]) {
+          flags.workflow = args[i + 1];
+          i += 2;
         } else {
           titleParts.push(args[i]);
           i++;
@@ -541,13 +550,28 @@ async function main() {
 
       const title = titleParts.join(" ").trim();
       if (!title) { writeStderr("Title cannot be empty.\n"); process.exit(1); }
-      if (flags.workflow_id) await ensureWorkflowExists(flags.workflow_id);
+      if (flags.workflow) await ensureWorkflowExists(flags.workflow);
+
+      // Resolve --project prefix to full id
+      let resolvedProjectId: string | undefined;
+      if (flags.project) {
+        const db = getDb();
+        const row = db
+          .prepare("SELECT id FROM projects WHERE id = ? OR id LIKE ? LIMIT 1")
+          .get(flags.project, `${flags.project}%`) as { id: string } | undefined;
+        if (!row) {
+          process.stderr.write(`Project not found: ${flags.project}\n`);
+          process.exit(1);
+        }
+        resolvedProjectId = row.id;
+      }
 
       const entry = addBacklogEntry({
         title,
         description: flags.description,
         priority: flags.priority,
-        workflow_id: flags.workflow_id,
+        projectId: resolvedProjectId,
+        workflowId: flags.workflow,
       });
 
       logLine(`Added backlog entry: ${entry.id} "${entry.title}"`);
@@ -635,6 +659,183 @@ async function main() {
     }
 
     writeStderr(`Unknown backlog action: ${action}\n`);
+    printUsage();
+    process.exit(1);
+  }
+
+  if (group === "project") {
+    const { addProject, listProjects, updateProject, deleteProject } = await import("../projects/index.js");
+    const { getDb } = await import("../db.js");
+
+    if (action === "list") {
+      const wantsJson = args.includes("--json");
+      const entries = listProjects();
+
+      if (wantsJson) {
+        console.log(JSON.stringify(entries));
+        return;
+      }
+
+      if (entries.length === 0) {
+        console.log("No projects.");
+        return;
+      }
+
+      for (const entry of entries) {
+        const idPrefix = entry.id.slice(0, 8);
+        const gitPath = entry.git_repo_path ?? "(none)";
+        const ghUrl = entry.github_repo_url ?? "(none)";
+        console.log(`${idPrefix}  ${entry.name}  ${gitPath}  ${ghUrl}`);
+      }
+      return;
+    }
+
+    if (action === "add") {
+      if (!target) { process.stderr.write("Missing name argument.\n"); process.exit(1); }
+
+      // Parse name from target and any additional positional args
+      const nameParts: string[] = [target];
+      const flags: { gitRepoPath?: string; githubRepoUrl?: string } = {};
+
+      let i = 3;
+      while (i < args.length) {
+        if (args[i] === "--git-repo-path" && args[i + 1]) {
+          flags.gitRepoPath = args[i + 1];
+          i += 2;
+        } else if (args[i] === "--github-repo-url" && args[i + 1]) {
+          flags.githubRepoUrl = args[i + 1];
+          i += 2;
+        } else {
+          nameParts.push(args[i]);
+          i++;
+        }
+      }
+
+      const name = nameParts.join(" ").trim();
+      if (!name) { process.stderr.write("Name cannot be empty.\n"); process.exit(1); }
+
+      const entry = addProject({ name, gitRepoPath: flags.gitRepoPath, githubRepoUrl: flags.githubRepoUrl });
+      console.log(entry.id);
+      return;
+    }
+
+    if (action === "update") {
+      if (!target) { process.stderr.write("Missing id argument.\n"); process.exit(1); }
+
+      const updates: { name?: string; git_repo_path?: string; github_repo_url?: string } = {};
+      let i = 3;
+      while (i < args.length) {
+        if (args[i] === "--name" && args[i + 1]) {
+          updates.name = args[i + 1];
+          i += 2;
+        } else if (args[i] === "--git-repo-path" && args[i + 1]) {
+          updates.git_repo_path = args[i + 1];
+          i += 2;
+        } else if (args[i] === "--github-repo-url" && args[i + 1]) {
+          updates.github_repo_url = args[i + 1];
+          i += 2;
+        } else {
+          i++;
+        }
+      }
+
+      if (Object.keys(updates).length === 0) {
+        process.stderr.write("No update flags provided. Use --name, --git-repo-path, or --github-repo-url.\n");
+        process.exit(1);
+      }
+
+      // Prefix-match the id
+      const db = getDb();
+      const row = db
+        .prepare("SELECT id FROM projects WHERE id = ? OR id LIKE ? LIMIT 1")
+        .get(target, `${target}%`) as { id: string } | undefined;
+
+      if (!row) {
+        process.stderr.write(`Project not found: ${target}\n`);
+        process.exit(1);
+      }
+
+      const updated = updateProject(row.id, updates);
+      if (!updated) {
+        process.stderr.write(`Failed to update project: ${row.id}\n`);
+        process.exit(1);
+      }
+
+      console.log(`Updated project: ${updated.id}`);
+      return;
+    }
+
+    if (action === "delete") {
+      if (!target) { process.stderr.write("Missing id argument.\n"); process.exit(1); }
+
+      // Prefix-match the id
+      const db = getDb();
+      const row = db
+        .prepare("SELECT id FROM projects WHERE id = ? OR id LIKE ? LIMIT 1")
+        .get(target, `${target}%`) as { id: string } | undefined;
+
+      if (!row) {
+        process.stderr.write(`Project not found: ${target}\n`);
+        process.exit(1);
+      }
+
+      deleteProject(row.id);
+      console.log(`Deleted project: ${row.id}`);
+      return;
+    }
+
+    if (action === "show") {
+      if (!target) { process.stderr.write("Missing id argument.\n"); process.exit(1); }
+      const wantsJson = args.includes("--json");
+
+      const { getProjectBacklog, getProjectRuns } = await import("../projects/index.js");
+      const db = getDb();
+      const row = db
+        .prepare("SELECT id FROM projects WHERE id = ? OR id LIKE ? LIMIT 1")
+        .get(target, `${target}%`) as { id: string } | undefined;
+
+      if (!row) {
+        process.stderr.write(`Project not found: ${target}\n`);
+        process.exit(1);
+      }
+
+      const project = (await import("../projects/index.js")).getProject(row.id);
+      if (!project) { process.stderr.write(`Project not found: ${target}\n`); process.exit(1); }
+
+      const backlog = getProjectBacklog(project.id);
+      const runs = getProjectRuns(project.id);
+
+      if (wantsJson) {
+        console.log(JSON.stringify({ ...project, backlog, runs }));
+        return;
+      }
+
+      console.log(`Project: ${project.name} (${project.id.slice(0, 8)})`);
+      if (project.git_repo_path) console.log(`  Git: ${project.git_repo_path}`);
+      if (project.github_repo_url) console.log(`  GitHub: ${project.github_repo_url}`);
+      console.log("");
+      console.log(`Backlog (${backlog.length}):`);
+      if (backlog.length === 0) {
+        console.log("  (none)");
+      } else {
+        for (const e of backlog) {
+          console.log(`  ${e.id.slice(0, 8)}  [${e.status}]  ${e.title}`);
+        }
+      }
+      console.log("");
+      console.log(`Runs (${runs.length}):`);
+      if (runs.length === 0) {
+        console.log("  (none)");
+      } else {
+        for (const r of runs) {
+          const num = r.run_number != null ? `#${r.run_number}` : r.id.slice(0, 8);
+          console.log(`  ${num.padEnd(6)}  [${r.status}]  ${r.task.slice(0, 60)}`);
+        }
+      }
+      return;
+    }
+
+    process.stderr.write(`Unknown project action: ${action}\n`);
     printUsage();
     process.exit(1);
   }

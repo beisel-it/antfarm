@@ -261,7 +261,7 @@ h2.problem-text {
 .section-link a { text-decoration: underline; text-underline-offset: 2px; }
 
 /* === Steps grid === */
-.steps-grid {
+.steps-grid, .feature-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 16px;

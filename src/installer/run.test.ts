@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
 import os from "node:os";
-import { extractRepoPath, isGitRepo, computeRepoLockKey } from "./run.js";
+import { extractRepoPath, isGitRepo, computeRepoLockKey } from "../../dist/installer/run.js";
 
 describe("extractRepoPath", () => {
   it("should extract absolute path from task string", () => {

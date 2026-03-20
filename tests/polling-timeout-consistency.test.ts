@@ -25,6 +25,8 @@ describe("polling timeout consistency across all workflows", () => {
 
     let checked = 0;
     for (const dir of workflowDirs) {
+      // Skip dirs that don't have a workflow.yml (e.g. ops-config which only has agents/)
+      if (!fs.existsSync(path.join(dir, "workflow.yml"))) continue;
       const spec = await loadWorkflowSpec(dir);
       if (spec.polling?.timeoutSeconds != null) {
         assert.ok(

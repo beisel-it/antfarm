@@ -19,6 +19,7 @@ export function getDb(): DatabaseSync {
   _db = new DatabaseSync(DB_PATH);
   _dbOpenedAt = now;
   _db.exec("PRAGMA journal_mode=WAL");
+  _db.exec("PRAGMA busy_timeout=5000");
   _db.exec("PRAGMA foreign_keys=ON");
   migrate(_db);
   return _db;
@@ -89,6 +90,15 @@ function migrate(db: DatabaseSync): void {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS projects (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      git_repo_path TEXT,
+      github_repo_url TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 
   // Add run_id column to backlog table for backwards compat
@@ -99,6 +109,9 @@ function migrate(db: DatabaseSync): void {
   }
   if (!backlogColNames.has("run_id")) {
     db.exec("ALTER TABLE backlog ADD COLUMN run_id TEXT");
+  }
+  if (!backlogColNames.has("project_id")) {
+    db.exec("ALTER TABLE backlog ADD COLUMN project_id TEXT");
   }
 
   // Add columns to steps table for backwards compat
@@ -136,6 +149,9 @@ function migrate(db: DatabaseSync): void {
       ) WHERE run_number IS NULL
     `);
   }
+  if (!runColNames.has("project_id")) {
+    db.exec("ALTER TABLE runs ADD COLUMN project_id TEXT");
+  }
 }
 
 export function nextRunNumber(): number {
@@ -152,10 +168,20 @@ export interface BacklogEntry {
   id: string;
   title: string;
   description: string | null;
-  workflow_id: string | null;
   status: string;
   priority: number;
   run_id: string | null;
+  project_id: string | null;
+  workflow_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectEntry {
+  id: string;
+  name: string;
+  git_repo_path: string | null;
+  github_repo_url: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -163,6 +189,6 @@ export interface BacklogEntry {
 export function getBacklog(): BacklogEntry[] {
   const db = getDb();
   return db.prepare(
-    "SELECT id, title, description, workflow_id, status, priority, run_id, created_at, updated_at FROM backlog ORDER BY priority ASC, created_at ASC"
+    "SELECT id, title, description, status, priority, run_id, project_id, workflow_id, created_at, updated_at FROM backlog ORDER BY priority ASC, created_at ASC"
   ).all() as unknown as BacklogEntry[];
 }

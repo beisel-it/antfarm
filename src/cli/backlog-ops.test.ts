@@ -1,7 +1,7 @@
 import { describe, test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { addBacklogItem, listBacklogItems } from "./backlog-ops.js";
-import { getDb } from "../db.js";
+import { addBacklogItem, listBacklogItems } from "../../dist/cli/backlog-ops.js";
+import { getDb } from "../../dist/db.js";
 
 describe("backlog-ops", () => {
   // Cleanup test data after each test
