@@ -131,6 +131,29 @@ export function startDashboard(port = 3333, deps: DashboardDeps = {}): http.Serv
       return json(res, stories);
     }
 
+    const stepRetryMatch = p.match(/^\/api\/runs\/([^/]+)\/steps\/([^/]+)\/retry$/);
+    if (stepRetryMatch && req.method === "POST") {
+      const [, runId, stepId] = stepRetryMatch;
+      const db = getDb();
+      const step = db.prepare("SELECT id FROM steps WHERE id = ? AND run_id = ?").get(stepId, runId);
+      if (!step) return json(res, { error: "not found" }, 404);
+      db.prepare("UPDATE steps SET status = 'pending', retry_count = 0, output = NULL, updated_at = datetime('now') WHERE id = ?").run(stepId);
+      db.prepare("UPDATE runs SET status = 'running', updated_at = datetime('now') WHERE id = ? AND status = 'failed'").run(runId);
+      return json(res, { ok: true });
+    }
+
+    const storyRetryMatch = p.match(/^\/api\/runs\/([^/]+)\/stories\/([^/]+)\/retry$/);
+    if (storyRetryMatch && req.method === "POST") {
+      const [, runId, storyId] = storyRetryMatch;
+      const db = getDb();
+      const story = db.prepare("SELECT id FROM stories WHERE id = ? AND run_id = ?").get(storyId, runId);
+      if (!story) return json(res, { error: "not found" }, 404);
+      db.prepare("UPDATE stories SET status = 'pending', retry_count = 0, updated_at = datetime('now') WHERE id = ?").run(storyId);
+      db.prepare("UPDATE steps SET status = 'pending', current_story_id = NULL, updated_at = datetime('now') WHERE run_id = ? AND type = 'loop' AND status = 'failed'").run(runId);
+      db.prepare("UPDATE runs SET status = 'running', updated_at = datetime('now') WHERE id = ? AND status = 'failed'").run(runId);
+      return json(res, { ok: true });
+    }
+
     const cancelMatch = p.match(/^\/api\/runs\/([^/]+)\/cancel$/);
     if (cancelMatch && req.method === "POST") {
       stopWorkflow(cancelMatch[1]).then((result) => {

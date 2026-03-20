@@ -558,6 +558,20 @@ async function dispatchBacklogEntry(id, btn) {
   }
 }
 
+async function retryStep(runId, stepId) {
+  try {
+    await fetch(`${API}/api/runs/${runId}/steps/${stepId}/retry`, { method: 'POST' });
+    await refreshOpenRunPanel();
+  } catch { /* ignore */ }
+}
+
+async function retryStory(runId, storyId) {
+  try {
+    await fetch(`${API}/api/runs/${runId}/stories/${storyId}/retry`, { method: 'POST' });
+    await refreshOpenRunPanel();
+  } catch { /* ignore */ }
+}
+
 async function cancelRun(id, event) {
   event.stopPropagation();
   if (!confirm('Cancel this run?')) return;
@@ -669,6 +683,7 @@ function renderRunPanel(run) {
         <div class="step-name" style="flex:1">${s.step_id}</div>
         <div class="step-agent">${s.agent_id || ''}</div>
         <div class="step-status"><span class="badge badge-${st}">${st}</span></div>
+        ${st === 'failed' ? `<button onclick="event.stopPropagation();retryStep('${run.id}','${s.id}')" style="font-size:10px;padding:2px 8px;border:1px solid var(--accent-orange);color:var(--accent-orange);background:transparent;border-radius:4px;cursor:pointer">↺ Retry</button>` : ''}
         ${hasOutput ? '<span class="step-chevron" style="color:var(--text-secondary);font-size:10px;transition:transform .15s;display:inline-block">▶</span>' : ''}
       </div>
       ${hasOutput ? `<div class="step-details" style="display:none;padding:0 12px 12px 44px;font-size:12px;color:var(--text-tertiary);line-height:1.6">
@@ -775,6 +790,7 @@ async function loadStories(runId) {
               <div class="step-icon ${st}">${icon}</div>
               <div class="step-name" style="flex:1">${s.story_id}: ${s.title}${retryInfo}</div>
               <div class="step-status"><span class="badge badge-${st}">${st}</span></div>
+              ${st === 'failed' ? `<button onclick="event.stopPropagation();retryStory('${openRunId}','${s.id}')" style="font-size:10px;padding:2px 8px;border:1px solid var(--accent-orange);color:var(--accent-orange);background:transparent;border-radius:4px;cursor:pointer">↺ Retry</button>` : ''}
               ${hasDetails ? '<span class="story-chevron" style="color:var(--text-secondary);font-size:10px;transition:transform .15s;display:inline-block">▶</span>' : ''}
             </div>
             ${hasDetails ? `<div class="story-details" style="display:none;padding:0 12px 12px 44px;font-size:12px;color:var(--text-tertiary);line-height:1.6">
