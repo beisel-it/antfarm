@@ -194,6 +194,18 @@ export async function runWorkflow(params: {
 }
 
 /**
+ * Returns the active (status='running') run for a project, or null if none.
+ */
+export function getActiveRunForProject(projectId: string): { id: string; run_number: number | null; workflow_id: string; task: string } | null {
+  if (!projectId) return null;
+  const db = getDb();
+  const row = db.prepare(
+    "SELECT id, run_number, workflow_id, task FROM runs WHERE project_id = ? AND status = 'running' LIMIT 1"
+  ).get(projectId) as { id: string; run_number: number | null; workflow_id: string; task: string } | undefined;
+  return row ?? null;
+}
+
+/**
  * Extract a repo path from a task string.
  * Looks for REPO: prefix first, then absolute paths, then ~/home-relative paths.
  * Returns null if no repo path is detected.
