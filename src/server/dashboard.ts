@@ -21,7 +21,7 @@ import {
   getProjectRuns,
 } from "../projects/index.js";
 import YAML from "yaml";
-import { runWorkflow } from "../installer/run.js";
+import { runWorkflow, getActiveRunForProject } from "../installer/run.js";
 
 import type { RunInfo, StepInfo } from "../installer/status.js";
 import { stopWorkflow } from "../installer/status.js";
@@ -118,10 +118,12 @@ function findBacklogEntryById(id: string) {
 
 interface DashboardDeps {
   runWorkflow?: typeof runWorkflow;
+  getActiveRunForProject?: typeof getActiveRunForProject;
 }
 
 export function startDashboard(port = 3333, deps: DashboardDeps = {}): http.Server {
   const runWorkflowImpl = deps.runWorkflow ?? runWorkflow;
+  const getActiveRunForProjectImpl = deps.getActiveRunForProject ?? getActiveRunForProject;
   const server = http.createServer((req, res) => {
     const url = new URL(req.url ?? "/", `http://localhost:${port}`);
     const p = url.pathname;
@@ -258,8 +260,16 @@ export function startDashboard(port = 3333, deps: DashboardDeps = {}): http.Serv
             workflowId = workflows[0].id;
           }
 
+          const projectId = entry.project_id ?? undefined;
+          if (projectId) {
+            const activeRun = getActiveRunForProjectImpl(projectId);
+            if (activeRun) {
+              return json(res, { error: "Project already has an active run", activeRunId: activeRun.id, activeRunNumber: activeRun.run_number }, 409);
+            }
+          }
+
           const taskTitle = entry.title + (entry.description ? "\n\n" + entry.description : "");
-          const run = await runWorkflowImpl({ workflowId, taskTitle, projectId: entry.project_id ?? undefined });
+          const run = await runWorkflowImpl({ workflowId, taskTitle, projectId });
 
           updateBacklogEntry(entry.id, { status: "dispatched", run_id: run.id });
 

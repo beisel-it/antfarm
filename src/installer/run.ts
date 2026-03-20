@@ -129,6 +129,14 @@ export async function runWorkflow(params: {
   notifyUrl?: string;
   projectId?: string;
 }): Promise<{ id: string; runNumber: number; workflowId: string; task: string; status: string }> {
+  // Guard: reject if project already has an active run
+  if (params.projectId) {
+    const activeRun = getActiveRunForProject(params.projectId);
+    if (activeRun) {
+      throw new Error(`Project already has an active run: #${activeRun.run_number} (${activeRun.id})`);
+    }
+  }
+
   const workflowDir = resolveWorkflowDir(params.workflowId);
   const workflow = await loadWorkflowSpec(workflowDir);
   const db = getDb();
@@ -191,6 +199,18 @@ export async function runWorkflow(params: {
   });
 
   return { id: runId, runNumber, workflowId: workflow.id, task: params.taskTitle, status: "running" };
+}
+
+/**
+ * Returns the active (status='running') run for a project, or null if none.
+ */
+export function getActiveRunForProject(projectId: string): { id: string; run_number: number | null; workflow_id: string; task: string } | null {
+  if (!projectId) return null;
+  const db = getDb();
+  const row = db.prepare(
+    "SELECT id, run_number, workflow_id, task FROM runs WHERE project_id = ? AND status = 'running' LIMIT 1"
+  ).get(projectId) as { id: string; run_number: number | null; workflow_id: string; task: string } | undefined;
+  return row ?? null;
 }
 
 /**

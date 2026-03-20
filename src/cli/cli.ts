@@ -1063,6 +1063,7 @@ async function main() {
   if (action === "run") {
     let notifyUrl: string | undefined;
     let dryRun = false;
+    let projectId: string | undefined;
     const runArgs = args.slice(3);
     const nuIdx = runArgs.indexOf("--notify-url");
     if (nuIdx !== -1) {
@@ -1074,16 +1075,45 @@ async function main() {
       dryRun = true;
       runArgs.splice(drIdx, 1);
     }
+    const projIdx = runArgs.indexOf("--project");
+    if (projIdx !== -1) {
+      const projPrefix = runArgs[projIdx + 1];
+      runArgs.splice(projIdx, 2);
+      if (!projPrefix) {
+        process.stderr.write("Missing project id after --project.\n");
+        process.exit(1);
+      }
+      // Resolve prefix to full id
+      const { getDb } = await import("../db.js");
+      const db = getDb();
+      const row = db
+        .prepare("SELECT id FROM projects WHERE id = ? OR id LIKE ? LIMIT 1")
+        .get(projPrefix, `${projPrefix}%`) as { id: string } | undefined;
+      if (!row) {
+        process.stderr.write(`Project not found: ${projPrefix}\n`);
+        process.exit(1);
+      }
+      projectId = row.id;
+    }
     const taskTitle = runArgs.join(" ").trim();
     if (dryRun) {
       await dryRunWorkflow({ workflowId: target, taskTitle });
       return;
     }
     if (!taskTitle) { process.stderr.write("Missing task title.\n"); printUsage(); process.exit(1); }
-    const run = await runWorkflow({ workflowId: target, taskTitle, notifyUrl });
-    process.stdout.write(
-      [`Run: #${run.runNumber} (${run.id})`, `Workflow: ${run.workflowId}`, `Task: ${run.task}`, `Status: ${run.status}`].join("\n") + "\n",
-    );
+    try {
+      const run = await runWorkflow({ workflowId: target, taskTitle, notifyUrl, projectId });
+      process.stdout.write(
+        [`Run: #${run.runNumber} (${run.id})`, `Workflow: ${run.workflowId}`, `Task: ${run.task}`, `Status: ${run.status}`].join("\n") + "\n",
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("already has an active run")) {
+        process.stderr.write(`Cannot start run: ${msg}\n`);
+        process.exit(1);
+      }
+      throw err;
+    }
     return;
   }
 
