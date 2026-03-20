@@ -184,6 +184,7 @@ select:focus{outline:none;border-color:#8ECFC0}
 .backlog-dispatch-btn{background:var(--accent-green);color:#fff;border:none;border-radius:4px;padding:3px 8px;font-size:11px;font-weight:600;cursor:pointer;transition:opacity .15s}
 .backlog-dispatch-btn:hover{opacity:.85}
 .backlog-dispatch-btn:disabled{opacity:.5;cursor:not-allowed}
+.backlog-dispatch-btn--blocked{background:var(--accent-orange);cursor:not-allowed}
 .backlog-delete-btn{background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:12px;padding:2px 5px;border-radius:3px;line-height:1}
 .backlog-delete-btn:hover{color:var(--accent-orange);background:var(--accent-orange-subtle)}
 
@@ -285,6 +286,7 @@ let openRunId = null;
 let openRunRefreshInterval = null;
 let backlogEntries = [];
 let projects = [];
+let allRuns = [];
 
 // ── Status filters ───────────────────────────────────────────────
 const STATUS_FILTER_KEY = 'antfarm-status-filter';
@@ -526,6 +528,7 @@ async function loadRuns() {
     loadBacklog(),
     loadProjects(),
   ]);
+  allRuns = runs;
   renderBoard(currentWf, runs);
 }
 
@@ -541,12 +544,18 @@ function renderBacklogColumn() {
     ? '<div class="empty">No backlog entries</div>'
     : entries.map(entry => {
         const isDispatched = entry.status === 'dispatched';
+        const hasActiveRun = entry.project_id
+          ? allRuns.some(r => r.project_id === entry.project_id && r.status === 'running')
+          : false;
         const cls = isDispatched ? 'dispatched' : '';
         const priorityBadge = entry.priority > 0
           ? `<span class="badge badge-pending" title="Priority">P${entry.priority}</span>`
           : '';
         const checkIcon = isDispatched ? '✓ ' : '';
         const btnLabel = isDispatched ? 'Dispatched ✓' : 'Dispatch';
+        const dispatchDisabled = isDispatched || hasActiveRun ? 'disabled' : '';
+        const dispatchClass = hasActiveRun ? 'backlog-dispatch-btn backlog-dispatch-btn--blocked' : 'backlog-dispatch-btn';
+        const dispatchTitle = hasActiveRun ? 'title="Project run already in flight"' : '';
         return `<div class="backlog-card ${cls}" data-backlog-id="${entry.id}" data-backlog-title="${esc(entry.title)}">
           <div class="backlog-card-title" title="${esc(entry.title)}">${checkIcon}${esc(entry.title)}</div>
           <div class="backlog-card-error" style="display:none;color:var(--status-failed,#e05);font-size:11px;margin-top:4px"></div>
@@ -555,7 +564,7 @@ function renderBacklogColumn() {
               <span class="badge badge-${entry.status} backlog-status-badge">${entry.status}</span>
               ${priorityBadge}
             </span>
-            <button class="backlog-dispatch-btn" onclick="dispatchBacklogEntry('${entry.id}',this)" ${isDispatched ? 'disabled' : ''}>${btnLabel}</button>
+            <button class="${dispatchClass}" onclick="dispatchBacklogEntry('${entry.id}',this)" ${dispatchDisabled} ${dispatchTitle}>${btnLabel}</button>
             <button class="backlog-delete-btn" onclick="deleteBacklogEntry('${entry.id}',this)" title="Delete">✕</button>
           </div>
         </div>`;
@@ -591,6 +600,11 @@ async function dispatchBacklogEntry(id, btn) {
       }
       // Also refresh global state for next render
       await loadBacklog();
+    } else if (r.status === 409) {
+      btn.disabled = false;
+      btn.textContent = 'Dispatch';
+      const msg = data.error || 'Project run already in flight';
+      if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; }
     } else {
       btn.disabled = false;
       btn.textContent = 'Dispatch';

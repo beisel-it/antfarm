@@ -95,9 +95,12 @@ describe("US-010: Dispatch button functionality (HTML structure)", () => {
 
   it("dispatched button is disabled in rendered HTML", () => {
     // Check that rendered dispatched entries have disabled attribute on button
+    // (may also include hasActiveRun check for US-005)
     assert.ok(
       html.includes("isDispatched ? 'disabled' : ''") ||
-        html.includes('isDispatched ? "disabled" : ""'),
+        html.includes('isDispatched ? "disabled" : ""') ||
+        html.includes("isDispatched || hasActiveRun ? 'disabled'") ||
+        html.includes('isDispatched || hasActiveRun ? "disabled"'),
       "dispatched entries must render with disabled button"
     );
   });
