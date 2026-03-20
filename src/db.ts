@@ -153,6 +153,9 @@ function migrate(db: DatabaseSync): void {
   if (!runColNames.has("project_id")) {
     db.exec("ALTER TABLE runs ADD COLUMN project_id TEXT");
   }
+
+  // Backfill: normalize legacy 'completed' status to 'done' (idempotent)
+  db.exec("UPDATE runs SET status = 'done' WHERE status = 'completed'");
 }
 
 export function nextRunNumber(): number {
