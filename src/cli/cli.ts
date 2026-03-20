@@ -117,6 +117,13 @@ function printUsage() {
       "                                     [--title <t>] [--description <d>] [--status <s>] [--priority <n>]",
       "antfarm backlog delete <id>          Delete a backlog entry",
       "",
+      "antfarm project list [--json]        List all projects",
+      "antfarm project add <name> [--git-repo-path <path>] [--github-repo-url <url>]",
+      "                                     Add a project",
+      "antfarm project update <id-prefix>   Update a project",
+      "                                     [--name <n>] [--git-repo-path <path>] [--github-repo-url <url>]",
+      "antfarm project delete <id-prefix>   Delete a project",
+      "",
       "antfarm medic install                Install medic watchdog cron",
       "antfarm medic uninstall              Remove medic cron",
       "antfarm medic run [--json]           Run medic check now (manual trigger)",
@@ -587,6 +594,132 @@ async function main() {
     }
 
     process.stderr.write(`Unknown backlog action: ${action}\n`);
+    printUsage();
+    process.exit(1);
+  }
+
+  if (group === "project") {
+    const { addProject, listProjects, updateProject, deleteProject } = await import("../projects/index.js");
+    const { getDb } = await import("../db.js");
+
+    if (action === "list") {
+      const wantsJson = args.includes("--json");
+      const entries = listProjects();
+
+      if (wantsJson) {
+        console.log(JSON.stringify(entries));
+        return;
+      }
+
+      if (entries.length === 0) {
+        console.log("No projects.");
+        return;
+      }
+
+      for (const entry of entries) {
+        const idPrefix = entry.id.slice(0, 8);
+        const gitPath = entry.git_repo_path ?? "(none)";
+        const ghUrl = entry.github_repo_url ?? "(none)";
+        console.log(`${idPrefix}  ${entry.name}  ${gitPath}  ${ghUrl}`);
+      }
+      return;
+    }
+
+    if (action === "add") {
+      if (!target) { process.stderr.write("Missing name argument.\n"); process.exit(1); }
+
+      // Parse name from target and any additional positional args
+      const nameParts: string[] = [target];
+      const flags: { gitRepoPath?: string; githubRepoUrl?: string } = {};
+
+      let i = 3;
+      while (i < args.length) {
+        if (args[i] === "--git-repo-path" && args[i + 1]) {
+          flags.gitRepoPath = args[i + 1];
+          i += 2;
+        } else if (args[i] === "--github-repo-url" && args[i + 1]) {
+          flags.githubRepoUrl = args[i + 1];
+          i += 2;
+        } else {
+          nameParts.push(args[i]);
+          i++;
+        }
+      }
+
+      const name = nameParts.join(" ").trim();
+      if (!name) { process.stderr.write("Name cannot be empty.\n"); process.exit(1); }
+
+      const entry = addProject({ name, gitRepoPath: flags.gitRepoPath, githubRepoUrl: flags.githubRepoUrl });
+      console.log(entry.id);
+      return;
+    }
+
+    if (action === "update") {
+      if (!target) { process.stderr.write("Missing id argument.\n"); process.exit(1); }
+
+      const updates: { name?: string; git_repo_path?: string; github_repo_url?: string } = {};
+      let i = 3;
+      while (i < args.length) {
+        if (args[i] === "--name" && args[i + 1]) {
+          updates.name = args[i + 1];
+          i += 2;
+        } else if (args[i] === "--git-repo-path" && args[i + 1]) {
+          updates.git_repo_path = args[i + 1];
+          i += 2;
+        } else if (args[i] === "--github-repo-url" && args[i + 1]) {
+          updates.github_repo_url = args[i + 1];
+          i += 2;
+        } else {
+          i++;
+        }
+      }
+
+      if (Object.keys(updates).length === 0) {
+        process.stderr.write("No update flags provided. Use --name, --git-repo-path, or --github-repo-url.\n");
+        process.exit(1);
+      }
+
+      // Prefix-match the id
+      const db = getDb();
+      const row = db
+        .prepare("SELECT id FROM projects WHERE id = ? OR id LIKE ? LIMIT 1")
+        .get(target, `${target}%`) as { id: string } | undefined;
+
+      if (!row) {
+        process.stderr.write(`Project not found: ${target}\n`);
+        process.exit(1);
+      }
+
+      const updated = updateProject(row.id, updates);
+      if (!updated) {
+        process.stderr.write(`Failed to update project: ${row.id}\n`);
+        process.exit(1);
+      }
+
+      console.log(`Updated project: ${updated.id}`);
+      return;
+    }
+
+    if (action === "delete") {
+      if (!target) { process.stderr.write("Missing id argument.\n"); process.exit(1); }
+
+      // Prefix-match the id
+      const db = getDb();
+      const row = db
+        .prepare("SELECT id FROM projects WHERE id = ? OR id LIKE ? LIMIT 1")
+        .get(target, `${target}%`) as { id: string } | undefined;
+
+      if (!row) {
+        process.stderr.write(`Project not found: ${target}\n`);
+        process.exit(1);
+      }
+
+      deleteProject(row.id);
+      console.log(`Deleted project: ${row.id}`);
+      return;
+    }
+
+    process.stderr.write(`Unknown project action: ${action}\n`);
     printUsage();
     process.exit(1);
   }
