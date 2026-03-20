@@ -94,6 +94,11 @@ describe("stopWorkflow", () => {
   });
 
   it("returns not_found for a non-existent run", async () => {
+    // Ensure at least one run exists so the message includes the query string
+    const dummyRunId = crypto.randomUUID();
+    testRunIds.push(dummyRunId);
+    createTestRun({ runId: dummyRunId, workflowId: "test-wf-notfound", status: "running" });
+
     const result = await stopWorkflow("nonexistent-run-id-12345");
     assert.equal(result.status, "not_found");
     if (result.status !== "not_found") return;

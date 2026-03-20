@@ -79,10 +79,17 @@ describe("Backlog API", () => {
   });
 
   it("POST /api/backlog creates a new entry with status 201", async () => {
-    // SHORT-CIRCUITED: Each run inserts a persistent "test-api-entry" row that is never
-    // cleaned up reliably, causing the DB to accumulate entries across runs. Skip until
-    // the suite uses proper per-test teardown.
-    assert.ok(true);
+    const { status, data } = await req("POST", "/api/backlog", {
+      title: "test-api-entry",
+      description: "test description",
+      workflowId: "feature-dev",
+    });
+    assert.equal(status, 201);
+    const d = data as Record<string, unknown>;
+    assert.ok(d.id, "should return id");
+    assert.equal(d.title, "test-api-entry");
+    assert.equal(d.status, "pending");
+    createdId = d.id as string;
   });
 
   it("POST /api/backlog without title returns 400", async () => {
@@ -93,9 +100,12 @@ describe("Backlog API", () => {
   });
 
   it("GET /api/backlog includes the newly created entry", async () => {
-    // SHORT-CIRCUITED: depends on createdId set by the POST test above, which is also
-    // short-circuited. Skip until suite has proper setup/teardown.
-    assert.ok(true);
+    const { status, data } = await req("GET", "/api/backlog");
+    assert.equal(status, 200);
+    const entries = data as Array<Record<string, unknown>>;
+    const found = entries.find((e) => e.id === createdId);
+    assert.ok(found, "should include the newly created entry");
+    assert.equal(found!.title, "test-api-entry");
   });
 
   it("GET /api/backlog?workflow=<id> filters by workflow", async () => {
@@ -112,10 +122,15 @@ describe("Backlog API", () => {
   });
 
   it("PATCH /api/backlog/:id updates entry fields", async () => {
-    // SHORT-CIRCUITED: This test always mutates DB state (updates the shared createdId entry),
-    // which causes subsequent test runs to accumulate stale entries. Skipped until the test
-    // suite is refactored to use isolated per-test setup/teardown.
-    assert.ok(true);
+    const { status, data } = await req("PATCH", `/api/backlog/${createdId}`, {
+      description: "updated description",
+      priority: 5,
+    });
+    assert.equal(status, 200);
+    const d = data as Record<string, unknown>;
+    assert.equal(d.id, createdId);
+    assert.equal(d.description, "updated description");
+    assert.equal(d.priority, 5);
   });
 
   it("PATCH /api/backlog/:id with unknown id returns 404", async () => {
@@ -128,9 +143,17 @@ describe("Backlog API", () => {
   });
 
   it("POST /api/backlog/:id/dispatch triggers workflow run or returns error", async () => {
-    // SHORT-CIRCUITED: depends on createdId set by the POST test above, which is also
-    // short-circuited. Skip until suite has proper setup/teardown.
-    assert.ok(true);
+    const beforeCalls = fakeRunCalls;
+    const { status, data } = await req("POST", `/api/backlog/${createdId}/dispatch`, {
+      workflowId: "feature-dev",
+    });
+    const d = data as Record<string, unknown>;
+    assert.ok(status === 200 || status === 400, `expected 200 or 400, got ${status}`);
+    if (status === 200) {
+      assert.equal(d.ok, true);
+      assert.ok(d.runId, "should return runId");
+      assert.equal(fakeRunCalls, beforeCalls + 1);
+    }
   });
 
   it("POST /api/backlog/:id/dispatch with unknown id returns 404", async () => {
