@@ -1,8 +1,9 @@
 /**
  * Tests for US-005: Loop progress badge between loop steps in renderRunPanel
+ * Updated for US-006: stories now passed directly to renderRunPanel(run, stories)
  *
  * Strategy: Extract renderLoopBadge + renderRunPanel JS from dist/server/index.html
- * and run via node:vm with a fake DOM and window._lastStories for progress data.
+ * and run via node:vm with a fake DOM. Stories are passed as second argument.
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
@@ -46,7 +47,7 @@ function callRenderRunPanel(run: object, stories: object[] = []): string {
   };
 
   const context = {
-    window: { _lastStories: stories },
+    window: {},
     document: {
       getElementById: (_id: string) => fakeEl,
     },
@@ -57,8 +58,8 @@ function callRenderRunPanel(run: object, stories: object[] = []): string {
     console,
   };
 
-  const script = `${badgeSrc}\n${panelSrc}\nrenderRunPanel(run)`;
-  runInNewContext(script, { ...context, run });
+  const script = `${badgeSrc}\n${panelSrc}\nrenderRunPanel(run, stories)`;
+  runInNewContext(script, { ...context, run, stories });
   return capturedHTML;
 }
 

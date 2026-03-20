@@ -47,7 +47,7 @@ function callRenderRunPanel(run: object): string {
   };
 
   const context = {
-    window: { _lastStories: [] },
+    window: {},
     document: {
       getElementById: (_id: string) => fakeEl,
     },

@@ -727,7 +727,8 @@ function parseTS(ts) { if (!ts) return null; if (!ts.endsWith('Z') && !ts.includ
 
 async function openRun(id) {
   const run = await fetchJSON(`/api/runs/${id}`);
-  renderRunPanel(run);
+  const stories = await fetchJSON(`/api/runs/${id}/stories`).catch(() => []);
+  renderRunPanel(run, stories || []);
   await Promise.all([loadStories(id), loadActivity(id)]);
   openRunId = id;
   document.getElementById('overlay').classList.add('open');
@@ -738,24 +739,26 @@ async function refreshOpenRunPanel() {
   if (!openRunId) return;
   try {
     const run = await fetchJSON(`/api/runs/${openRunId}`);
-    renderRunPanel(run);
+    const stories = await fetchJSON(`/api/runs/${openRunId}/stories`).catch(() => []);
+    renderRunPanel(run, stories || []);
     await Promise.all([loadStories(openRunId), loadActivity(openRunId)]);
   } catch {
     closePanel();
   }
 }
 
-function renderLoopBadge() {
-  const stories = window._lastStories || [];
-  const total = stories.length;
+function renderLoopBadge(stories) {
+  const list = stories || [];
+  const total = list.length;
   if (total === 0) {
     return `<div class="loop-badge-wrapper"><div class="loop-badge" title="Loop progress"><div class="loop-badge-text">0%</div></div></div>`;
   }
-  const done = stories.filter(s => s.status === 'done').length;
+  const done = list.filter(s => s.status === 'done').length;
   const pct = Math.round((done / total) * 100);
   return `<div class="loop-badge-wrapper"><div class="loop-badge" style="background:conic-gradient(var(--accent-teal) 0% ${pct}%,var(--accent-muted) ${pct}% 100%)" title="Loop progress: ${done}/${total}"><div class="loop-badge-text">${done}/${total}</div></div></div>`;
 }
-function renderRunPanel(run) {
+function renderRunPanel(run, stories) {
+  stories = stories || [];
   const panel = document.getElementById('panel');
   const created = run.created_at ? parseTS(run.created_at)?.toLocaleString() || "" : '';
   const updated = run.updated_at ? parseTS(run.updated_at)?.toLocaleString() || "" : '';
@@ -806,7 +809,7 @@ function renderRunPanel(run) {
     }
     // Inject badge before verify step (between implement and verify rows)
     if (verifyStepIds.has(s.id)) {
-      parts.push(renderLoopBadge());
+      parts.push(renderLoopBadge(stories));
     }
     parts.push(renderStepRow(s));
   });
