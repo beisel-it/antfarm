@@ -59,24 +59,31 @@ function loadWorkflows(): WorkflowDef[] {
   return results;
 }
 
-function getRuns(workflowId?: string, statusFilter?: string[]): Array<RunInfo & { steps: StepInfo[] }> {
+function getRuns(workflowId?: string, statusFilter?: string[], projectId?: string): Array<RunInfo & { steps: StepInfo[] }> {
   const db = getDb();
   let runs: RunInfo[];
-  if (workflowId && statusFilter && statusFilter.length > 0) {
-    const placeholders = statusFilter.map(() => "?").join(", ");
-    runs = db.prepare(
-      `SELECT * FROM runs WHERE workflow_id = ? AND status IN (${placeholders}) ORDER BY created_at DESC`
-    ).all(workflowId, ...statusFilter) as RunInfo[];
-  } else if (workflowId) {
-    runs = db.prepare("SELECT * FROM runs WHERE workflow_id = ? ORDER BY created_at DESC").all(workflowId) as RunInfo[];
-  } else if (statusFilter && statusFilter.length > 0) {
-    const placeholders = statusFilter.map(() => "?").join(", ");
-    runs = db.prepare(
-      `SELECT * FROM runs WHERE status IN (${placeholders}) ORDER BY created_at DESC`
-    ).all(...statusFilter) as RunInfo[];
-  } else {
-    runs = db.prepare("SELECT * FROM runs ORDER BY created_at DESC").all() as RunInfo[];
+
+  // Build WHERE clause dynamically
+  const conditions: string[] = [];
+  const params: (string | number | null)[] = [];
+
+  if (workflowId) {
+    conditions.push("workflow_id = ?");
+    params.push(workflowId);
   }
+  if (projectId) {
+    conditions.push("project_id = ?");
+    params.push(projectId);
+  }
+  if (statusFilter && statusFilter.length > 0) {
+    const placeholders = statusFilter.map(() => "?").join(", ");
+    conditions.push(`status IN (${placeholders})`);
+    params.push(...statusFilter);
+  }
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  runs = db.prepare(`SELECT * FROM runs ${whereClause} ORDER BY created_at DESC`).all(...params) as RunInfo[];
+
   return runs.map((r) => {
     const steps = db.prepare("SELECT * FROM steps WHERE run_id = ? ORDER BY step_index ASC").all(r.id) as StepInfo[];
     return { ...r, steps };
@@ -192,11 +199,12 @@ export function startDashboard(port = 3333, deps: DashboardDeps = {}): http.Serv
 
     if (p === "/api/runs") {
       const wf = url.searchParams.get("workflow") ?? undefined;
+      const projectId = url.searchParams.get("project") ?? undefined;
       const statusParam = url.searchParams.get("status");
       const statusFilter = statusParam && statusParam.trim() !== ""
         ? statusParam.split(",").map(s => s.trim()).filter(s => s !== "")
         : undefined;
-      return json(res, getRuns(wf, statusFilter));
+      return json(res, getRuns(wf, statusFilter, projectId));
     }
 
     // Medic API
