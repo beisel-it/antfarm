@@ -1,9 +1,11 @@
 /**
- * Tests for US-005: Loop progress badge between loop steps in renderRunPanel
- * Updated for US-006: stories now passed directly to renderRunPanel(run, stories)
+ * Tests for US-002: Loop counter in the Repeating Loop header
  *
- * Strategy: Extract renderLoopBadge + renderRunPanel JS from dist/server/index.html
- * and run via node:vm with a fake DOM. Stories are passed as second argument.
+ * The loop counter (done/total fraction) is now rendered inside the
+ * .loop-group-label header, not between step rows as a circular badge.
+ *
+ * Strategy: Extract renderRunPanel JS from dist/server/index.html and run it
+ * in a minimal DOM-like environment using vm to verify the rendered HTML.
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
@@ -33,9 +35,6 @@ function extractFn(src: string, name: string): string {
   return src.slice(start, end);
 }
 
-/**
- * Call renderRunPanel with given run data and stories available on window._lastStories.
- */
 function callRenderRunPanel(run: object, stories: object[] = []): string {
   const badgeSrc = extractFn(html, 'renderLoopBadge');
   const panelSrc = extractFn(html, 'renderRunPanel');
@@ -63,8 +62,7 @@ function callRenderRunPanel(run: object, stories: object[] = []): string {
   return capturedHTML;
 }
 
-// Minimal run object for a single loop group (implement + verify)
-function makeLoopRun(overrides: Partial<{stories: object[]}> = {}) {
+function makeLoopRun() {
   return {
     id: 'run-loop',
     workflow_id: 'feature-dev',
@@ -82,76 +80,76 @@ function makeLoopRun(overrides: Partial<{stories: object[]}> = {}) {
   };
 }
 
-describe('US-005: loop badge rendering', () => {
-  test('AC1: .loop-badge element is rendered inside .loop-group', () => {
-    const html_ = callRenderRunPanel(makeLoopRun());
-    // Check badge exists inside loop-group
-    assert.ok(html_.includes('class="loop-group"'), 'loop-group wrapper should exist');
-    assert.ok(html_.includes('loop-badge'), '.loop-badge element should be rendered');
-    // Verify badge is inside loop-group (badge appears after loop-group open tag and before close)
-    const groupOpen = html_.indexOf('class="loop-group"');
-    const badgeIdx = html_.indexOf('loop-badge');
-    assert.ok(badgeIdx > groupOpen, 'badge should appear inside the loop-group');
+describe('US-002: loop counter in Repeating Loop header', () => {
+  test('AC1: .loop-group-label contains a .loop-counter span', () => {
+    const rendered = callRenderRunPanel(makeLoopRun(), []);
+    assert.ok(rendered.includes('loop-group-label'), '.loop-group-label should be present');
+    assert.ok(rendered.includes('loop-counter'), '.loop-counter span should be in the header');
+    // Counter should be inside the label
+    const labelIdx = rendered.indexOf('loop-group-label');
+    const counterIdx = rendered.indexOf('loop-counter', labelIdx);
+    assert.ok(counterIdx > labelIdx, '.loop-counter should appear after loop-group-label opens');
   });
 
-  test('AC2: Badge background uses conic-gradient', () => {
-    const stories = [
-      { status: 'done' },
-      { status: 'done' },
-      { status: 'pending' },
-    ];
-    const html_ = callRenderRunPanel(makeLoopRun(), stories);
-    assert.ok(html_.includes('conic-gradient'), 'badge should use conic-gradient');
-  });
-
-  test('AC3: When all stories are done, badge fills 100% (uses accent-teal for full range)', () => {
-    const stories = [
-      { status: 'done' },
-      { status: 'done' },
-      { status: 'done' },
-    ];
-    const html_ = callRenderRunPanel(makeLoopRun(), stories);
-    // pct=100: conic-gradient(var(--accent-teal) 0% 100%, ...)
-    assert.ok(html_.includes('conic-gradient(var(--accent-teal) 0% 100%'), '100% fill should use accent-teal for full range');
-  });
-
-  test('AC4: When no stories exist, badge renders with 0% fill', () => {
-    const html_ = callRenderRunPanel(makeLoopRun(), []);
-    // With no stories, default badge with 0% label
-    assert.ok(html_.includes('loop-badge'), 'badge should still render');
-    assert.ok(html_.includes('0%'), 'badge should show 0% when no stories');
-  });
-
-  test('AC5: Badge renders inside .loop-group, between implement and verify step rows', () => {
+  test('AC1: loop-counter has title attribute with fraction info', () => {
     const stories = [{ status: 'done' }, { status: 'pending' }];
-    const html_ = callRenderRunPanel(makeLoopRun(), stories);
-    // Find positions: implement step, badge, verify step
-    const implIdx = html_.indexOf('>implement<');
-    const badgeIdx = html_.indexOf('loop-badge');
-    const verifyIdx = html_.indexOf('>verify<');
-    assert.ok(implIdx >= 0, 'implement step should exist');
-    assert.ok(verifyIdx >= 0, 'verify step should exist');
-    assert.ok(badgeIdx >= 0, 'badge should exist');
-    assert.ok(badgeIdx > implIdx, 'badge should come after implement step');
-    assert.ok(verifyIdx > badgeIdx, 'verify step should come after badge');
+    const rendered = callRenderRunPanel(makeLoopRun(), stories);
+    assert.ok(rendered.includes('title="Loop progress: 1/2"'), 'counter should have title with done/total fraction');
   });
 
-  test('AC5: Badge renders inside .loop-group div, not outside', () => {
-    const html_ = callRenderRunPanel(makeLoopRun(), []);
-    const groupStart = html_.indexOf('class="loop-group"');
-    const groupEnd = html_.lastIndexOf('</div>');
-    const badgeIdx = html_.indexOf('loop-badge');
-    assert.ok(badgeIdx > groupStart, 'badge should be inside loop-group');
-    assert.ok(badgeIdx < groupEnd, 'badge should be before end of group');
+  test('AC1: loop-counter shows done/total fraction text', () => {
+    const stories = [{ status: 'done' }, { status: 'done' }, { status: 'pending' }];
+    const rendered = callRenderRunPanel(makeLoopRun(), stories);
+    // Check fraction appears in the rendered HTML
+    assert.ok(rendered.includes('2/3'), 'counter should show 2/3 fraction');
   });
 
-  test('AC6: Badge shows fraction label like 3/7', () => {
-    const stories = Array.from({length: 7}, (_, i) => ({ status: i < 3 ? 'done' : 'pending' }));
-    const html_ = callRenderRunPanel(makeLoopRun(), stories);
-    assert.ok(html_.includes('3/7'), 'badge should show fraction label 3/7');
+  test('AC2: .loop-badge-wrapper is NOT injected between loop step rows', () => {
+    const stories = [{ status: 'done' }, { status: 'pending' }];
+    const rendered = callRenderRunPanel(makeLoopRun(), stories);
+    assert.ok(!rendered.includes('loop-badge-wrapper'), '.loop-badge-wrapper should NOT be in rendered HTML');
   });
 
-  test('Non-loop steps do not get a badge', () => {
+  test('AC4: verifyStepIds set is not used — no between-step badge injection', () => {
+    // The counter should be in the label only, not between implement and verify
+    const stories = [{ status: 'done' }, { status: 'pending' }];
+    const rendered = callRenderRunPanel(makeLoopRun(), stories);
+    const implIdx = rendered.indexOf('>implement<');
+    const verifyIdx = rendered.indexOf('>verify<');
+    // No loop-badge-wrapper between the two step rows
+    const between = rendered.slice(implIdx, verifyIdx);
+    assert.ok(!between.includes('loop-badge-wrapper'), 'No badge wrapper should appear between implement and verify step rows');
+  });
+
+  test('Edge: when stories is empty, counter shows 0/0', () => {
+    const rendered = callRenderRunPanel(makeLoopRun(), []);
+    assert.ok(rendered.includes('0/0'), 'counter should show 0/0 when stories is empty');
+    assert.ok(rendered.includes('loop-counter'), '.loop-counter should still render');
+  });
+
+  test('Edge: when all stories are done, counter shows N/N', () => {
+    const stories = [{ status: 'done' }, { status: 'done' }];
+    const rendered = callRenderRunPanel(makeLoopRun(), stories);
+    assert.ok(rendered.includes('2/2'), 'counter should show 2/2 when all done');
+  });
+
+  test('Edge: fraction 3/7 renders correctly', () => {
+    const stories = Array.from({ length: 7 }, (_, i) => ({ status: i < 3 ? 'done' : 'pending' }));
+    const rendered = callRenderRunPanel(makeLoopRun(), stories);
+    assert.ok(rendered.includes('3/7'), 'counter should show 3/7 fraction');
+  });
+
+  test('AC3: CSS does not contain .loop-badge, .loop-badge-wrapper, .loop-badge-text', () => {
+    // Verify these old CSS classes have been removed from the built HTML
+    assert.ok(!html.includes('.loop-badge-wrapper'), '.loop-badge-wrapper CSS class should be removed');
+    assert.ok(!html.includes('.loop-badge-text'), '.loop-badge-text CSS class should be removed');
+    // .loop-badge might still appear in JS as a reference to the function renderLoopBadge
+    // but the CSS class rule should be gone
+    const cssSection = html.slice(html.indexOf('<style'), html.indexOf('</style>'));
+    assert.ok(!cssSection.includes('.loop-badge{'), '.loop-badge CSS rule should be removed');
+  });
+
+  test('Non-loop steps do not get a counter', () => {
     const run = {
       id: 'run-single',
       workflow_id: 'feature-dev',
@@ -165,15 +163,8 @@ describe('US-005: loop badge rendering', () => {
       ],
       loopGroups: [],
     };
-    const html_ = callRenderRunPanel(run, []);
-    assert.ok(!html_.includes('loop-badge'), 'no badge for non-loop runs');
-    assert.ok(!html_.includes('loop-group'), 'no loop-group for non-loop runs');
-  });
-
-  test('CSS: loop-badge-text exists in CSS with absolute positioning', () => {
-    // Read the built HTML to check CSS
-    const builtHtml = readFileSync(join(__dirname, '../dist/server/index.html'), 'utf-8');
-    assert.ok(builtHtml.includes('.loop-badge-text'), '.loop-badge-text should exist in CSS');
-    assert.ok(builtHtml.includes('.loop-badge'), '.loop-badge CSS class should exist');
+    const rendered = callRenderRunPanel(run, []);
+    assert.ok(!rendered.includes('loop-counter'), 'no loop-counter for non-loop runs');
+    assert.ok(!rendered.includes('loop-group'), 'no loop-group for non-loop runs');
   });
 });

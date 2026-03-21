@@ -36,7 +36,7 @@ function extractFn(src: string, name: string): string {
   return src.slice(start, end);
 }
 
-function callRenderRunPanel(run: object): string {
+function callRenderRunPanel(run: object, stories: object[] = []): string {
   const badgeSrc = extractFn(html, 'renderLoopBadge');
   const fnSrc = extractFn(html, 'renderRunPanel');
 
@@ -58,8 +58,8 @@ function callRenderRunPanel(run: object): string {
     console,
   };
 
-  const script = `${badgeSrc}\n${fnSrc}\nrenderRunPanel(run)`;
-  runInNewContext(script, { ...context, run });
+  const script = `${badgeSrc}\n${fnSrc}\nrenderRunPanel(run, stories)`;
+  runInNewContext(script, { ...context, run, stories });
   return capturedHTML;
 }
 
@@ -228,5 +228,61 @@ describe('US-004: renderRunPanel loop group rendering', () => {
     assert.ok(html.includes('loop-group-label'), 'HTML should render loop-group-label');
     assert.ok(html.includes('loop-group-steps'), 'HTML should render loop-group-steps wrapper');
     assert.ok(html.includes('Repeating loop'), 'HTML should have a label text for the loop group');
+  });
+
+  test('US-003 AC5: .loop-group-label contains a .loop-counter span', () => {
+    const run = {
+      id: 'run-us003',
+      workflow_id: 'feature-dev',
+      task: 'Test task',
+      status: 'running',
+      created_at: null,
+      updated_at: null,
+      steps: [
+        { id: 'a1', step_id: 'implement', agent_id: 'dev', status: 'done', output: null, step_index: 0 },
+        { id: 'a2', step_id: 'verify', agent_id: 'verifier', status: 'pending', output: null, step_index: 1 },
+      ],
+      loopGroups: [
+        { loopStepId: 'a1', verifyStepId: 'a2', stepIds: ['a1', 'a2'] },
+      ],
+    };
+    const rendered = callRenderRunPanel(run);
+    // Both .loop-group-label and .loop-counter must be present
+    assert.ok(rendered.includes('loop-group-label'), '.loop-group-label should be present');
+    assert.ok(rendered.includes('loop-counter'), '.loop-counter span should be present');
+    // .loop-counter must appear inside .loop-group-label (i.e., after label opens, before label closes)
+    const labelOpenIdx = rendered.indexOf('loop-group-label');
+    assert.ok(labelOpenIdx >= 0, '.loop-group-label should be found');
+    // Find the closing tag of the label div — it's the next </div> after the label opens
+    const labelCloseIdx = rendered.indexOf('</div>', labelOpenIdx);
+    const counterIdx = rendered.indexOf('loop-counter', labelOpenIdx);
+    assert.ok(counterIdx > labelOpenIdx, '.loop-counter should appear after .loop-group-label opens');
+    assert.ok(counterIdx < labelCloseIdx, '.loop-counter should appear before .loop-group-label closes');
+  });
+
+  test('US-003: .loop-counter shows fraction text inside .loop-group-label', () => {
+    const run = {
+      id: 'run-us003b',
+      workflow_id: 'feature-dev',
+      task: 'Test task',
+      status: 'running',
+      created_at: null,
+      updated_at: null,
+      steps: [
+        { id: 'b1', step_id: 'implement', agent_id: 'dev', status: 'done', output: null, step_index: 0 },
+        { id: 'b2', step_id: 'verify', agent_id: 'verifier', status: 'done', output: null, step_index: 1 },
+      ],
+      loopGroups: [
+        { loopStepId: 'b1', verifyStepId: 'b2', stepIds: ['b1', 'b2'] },
+      ],
+    };
+    // Pass 2 done stories to get a 2/2 counter
+    const stories = [{ status: 'done' }, { status: 'done' }];
+    const rendered = callRenderRunPanel(run, stories);
+    const labelOpenIdx = rendered.indexOf('loop-group-label');
+    const labelCloseIdx = rendered.indexOf('</div>', labelOpenIdx);
+    const headerSection = rendered.slice(labelOpenIdx, labelCloseIdx + 6);
+    // Fraction text should be in the header section
+    assert.ok(headerSection.includes('2/2'), 'done/total fraction 2/2 should appear inside the loop-group-label');
   });
 });
