@@ -210,7 +210,7 @@ select:focus{outline:none;border-color:#8ECFC0}
 
 /* ── Misc ──────────────────────────────────────────────────────── */
 .empty{color:var(--text-secondary);font-size:12px;text-align:center;padding:24px 8px}
-.refresh-note{color:rgba(255,255,255,.6);font-size:11px;margin-left:auto}
+.refresh-note{color:rgba(255,255,255,.6);font-size:11px}
 @media(max-width:768px){.board{flex-direction:column}.column{min-width:unset}}
 .story-open{display:block!important}
 .story-chevron-open{transform:rotate(90deg)}
@@ -318,7 +318,6 @@ select:focus{outline:none;border-color:#8ECFC0}
     <button class="status-filter-btn" data-status="cancelled">cancelled</button>
   </div>
   <button class="theme-toggle" id="theme-toggle" title="Toggle light/dark mode" aria-label="Toggle light/dark mode">☀️</button>
-  <span class="refresh-note" id="refresh-note">Auto-refresh: 30s</span>
 </header>
 <div class="board" id="board"><div class="empty" style="margin:auto">Select a workflow</div></div>
 <div class="medic-panel" id="medic-panel">
@@ -392,6 +391,7 @@ select:focus{outline:none;border-color:#8ECFC0}
     <span class="medic-dot unknown" id="medic-dot"></span>
     <span id="medic-label">Medic</span>
   </div>
+  <span class="refresh-note" id="refresh-note">Auto-refresh: 30s</span>
 </footer>
 
 <script>

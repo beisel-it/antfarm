@@ -204,3 +204,78 @@ describe("US-002: Move Medic badge into the status bar", () => {
     assert.ok(rule.includes("bottom:40px"), "Expected bottom:40px in dist .medic-panel rule");
   });
 });
+
+describe("US-003: Move Auto-Refresh note into the status bar", () => {
+  const html = fs.readFileSync(htmlPath, "utf8");
+  const distHtml = fs.readFileSync(distHtmlPath, "utf8");
+
+  it("#refresh-note is inside #status-bar, not inside <header>", () => {
+    const statusBarIdx = html.indexOf('<footer id="status-bar">');
+    const footerCloseIdx = html.indexOf("</footer>", statusBarIdx);
+    const refreshNoteIdx = html.indexOf('id="refresh-note"');
+    assert.ok(statusBarIdx !== -1, "footer#status-bar should exist");
+    assert.ok(refreshNoteIdx !== -1, "#refresh-note should exist");
+    assert.ok(
+      refreshNoteIdx > statusBarIdx && refreshNoteIdx < footerCloseIdx,
+      "#refresh-note should be inside <footer id=\"status-bar\">"
+    );
+  });
+
+  it("#refresh-note is NOT inside <header>", () => {
+    const headerStart = html.indexOf("<header");
+    const headerEnd = html.indexOf("</header>");
+    const refreshNoteIdx = html.indexOf('id="refresh-note"');
+    assert.ok(headerStart !== -1, "<header> should exist");
+    assert.ok(headerEnd !== -1, "</header> should exist");
+    assert.ok(refreshNoteIdx !== -1, "#refresh-note should exist");
+    const isInsideHeader = refreshNoteIdx > headerStart && refreshNoteIdx < headerEnd;
+    assert.ok(!isInsideHeader, "#refresh-note should NOT be inside <header>");
+  });
+
+  it("#refresh-note displays 'Auto-refresh: 30s' text", () => {
+    assert.ok(
+      html.includes('>Auto-refresh: 30s<'),
+      "Expected #refresh-note to contain text 'Auto-refresh: 30s'"
+    );
+  });
+
+  it(".refresh-note CSS does not have margin-left:auto", () => {
+    const ruleIdx = html.indexOf(".refresh-note{");
+    assert.ok(ruleIdx !== -1, ".refresh-note CSS rule should exist");
+    const rule = html.slice(ruleIdx, ruleIdx + 200);
+    assert.ok(
+      !rule.includes("margin-left:auto"),
+      "Expected margin-left:auto to be removed from .refresh-note rule"
+    );
+  });
+
+  it("dist: #refresh-note is inside #status-bar", () => {
+    const statusBarIdx = distHtml.indexOf('<footer id="status-bar">');
+    const footerCloseIdx = distHtml.indexOf("</footer>", statusBarIdx);
+    const refreshNoteIdx = distHtml.indexOf('id="refresh-note"');
+    assert.ok(statusBarIdx !== -1, "footer#status-bar should exist in dist");
+    assert.ok(refreshNoteIdx !== -1, "#refresh-note should exist in dist");
+    assert.ok(
+      refreshNoteIdx > statusBarIdx && refreshNoteIdx < footerCloseIdx,
+      "#refresh-note should be inside footer#status-bar in dist"
+    );
+  });
+
+  it("dist: #refresh-note is NOT inside <header>", () => {
+    const headerStart = distHtml.indexOf("<header");
+    const headerEnd = distHtml.indexOf("</header>");
+    const refreshNoteIdx = distHtml.indexOf('id="refresh-note"');
+    assert.ok(headerStart !== -1, "<header> should exist in dist");
+    assert.ok(headerEnd !== -1, "</header> should exist in dist");
+    assert.ok(refreshNoteIdx !== -1, "#refresh-note should exist in dist");
+    const isInsideHeader = refreshNoteIdx > headerStart && refreshNoteIdx < headerEnd;
+    assert.ok(!isInsideHeader, "#refresh-note should NOT be inside <header> in dist");
+  });
+
+  it("dist: #refresh-note displays 'Auto-refresh: 30s' text", () => {
+    assert.ok(
+      distHtml.includes('>Auto-refresh: 30s<'),
+      "Expected #refresh-note to contain 'Auto-refresh: 30s' in dist"
+    );
+  });
+});
