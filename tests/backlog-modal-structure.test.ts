@@ -70,8 +70,8 @@ describe('Backlog modal HTML structure', () => {
     assert.ok(html.includes('.backlog-modal-actions{display:flex'), 'Missing flex in .backlog-modal-actions');
   });
 
-  it('openBacklogModal function exists', () => {
-    assert.ok(html.includes('function openBacklogModal('), 'Missing openBacklogModal function');
+  it('openBacklogForm function exists', () => {
+    assert.ok(html.includes('function openBacklogForm('), 'Missing openBacklogForm function');
   });
 
   it('closeBacklogModal function exists', () => {

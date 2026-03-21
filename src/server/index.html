@@ -301,7 +301,7 @@ select:focus{outline:none;border-color:#8ECFC0}
 <div class="overlay" id="overlay" onclick="if(event.target===this)closePanel()">
   <div class="panel" id="panel"></div>
 </div>
-<div class="overlay" id="backlog-modal-overlay" style="display:none">
+<div class="overlay" id="backlog-modal-overlay" style="display:none" onclick="if(event.target===this)closeBacklogModal()">
   <div class="panel" id="backlog-modal">
     <button class="panel-close" onclick="closeBacklogModal()">✕</button>
     <h2 id="backlog-modal-title-heading">New Backlog Entry</h2>
@@ -345,6 +345,7 @@ let currentWf = null;
 let openRunId = null;
 let openRunRefreshInterval = null;
 let backlogEntries = [];
+let editingBacklogId = null;
 let projects = [];
 let allRuns = [];
 
@@ -638,7 +639,8 @@ function renderBacklogColumn() {
   </div>`;
 }
 
-function openBacklogModal(entryId) {
+function openBacklogForm() {
+  editingBacklogId = null;
   const overlay = document.getElementById('backlog-modal-overlay');
   const heading = document.getElementById('backlog-modal-title-heading');
   document.getElementById('bm-title').value = '';
@@ -654,13 +656,12 @@ function openBacklogModal(entryId) {
 }
 
 function closeBacklogModal() {
+  editingBacklogId = null;
   const overlay = document.getElementById('backlog-modal-overlay');
   overlay.classList.remove('open');
   overlay.style.display = 'none';
-}
-
-function openBacklogForm() {
-  openBacklogModal();
+  const form = document.getElementById('backlog-modal-form');
+  if (form) form.reset();
 }
 
 async function dispatchBacklogEntry(id, btn) {
