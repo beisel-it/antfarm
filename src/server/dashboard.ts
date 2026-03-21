@@ -212,7 +212,11 @@ export function startDashboard(port = 3333, deps: DashboardDeps = {}): http.Serv
     // Backlog API
     if (p === "/api/backlog" && req.method === "GET") {
       const workflowId = url.searchParams.get("workflow") ?? undefined;
-      return json(res, listBacklogEntries(workflowId ? { workflow_id: workflowId } : undefined));
+      const projectId = url.searchParams.get("project") ?? undefined;
+      const filters = workflowId || projectId
+        ? { workflow_id: workflowId, project_id: projectId }
+        : undefined;
+      return json(res, listBacklogEntries(filters));
     }
 
     if (p === "/api/backlog" && req.method === "POST") {
