@@ -273,6 +273,22 @@ select:focus{outline:none;border-color:#8ECFC0}
 .project-form-cancel{background:none;border:1px solid var(--border);border-radius:4px;padding:3px 10px;font-size:11px;color:var(--text-secondary);cursor:pointer}
 .project-add-btn{display:block;background:none;border:1px dashed var(--border);border-radius:4px;color:var(--text-secondary);cursor:pointer;font-size:11px;padding:5px;margin:4px 8px 8px;width:calc(100% - 16px);text-align:center;transition:border-color .15s,color .15s}
 .project-add-btn:hover{border-color:var(--accent-green);color:var(--accent-green)}
+
+/* ── Confirmation modal ────────────────────────────────────────── */
+.confirm-modal-backdrop{position:fixed;inset:0;background:var(--overlay);z-index:200;display:flex;align-items:center;justify-content:center}
+.confirm-modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--bg-surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 32px var(--shadow-heavy);z-index:201;padding:20px 24px;min-width:280px;max-width:440px;width:100%}
+.confirm-modal-title{font-size:15px;font-weight:600;color:var(--text-primary);margin-bottom:8px}
+.confirm-modal-body{font-size:13px;color:var(--text-secondary);margin-bottom:16px;line-height:1.5}
+.confirm-modal-actions{display:flex;gap:8px;justify-content:flex-end}
+.confirm-btn-danger{background:var(--accent-orange);color:#fff;border:none;border-radius:4px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer;transition:opacity .15s}
+.confirm-btn-danger:hover{opacity:.85}
+.confirm-btn-cancel{background:none;border:1px solid var(--border);border-radius:4px;padding:5px 14px;font-size:12px;color:var(--text-secondary);cursor:pointer;transition:background .15s,color .15s}
+.confirm-btn-cancel:hover{background:var(--bg-surface-alt);color:var(--text-primary)}
+
+/* ── Inline confirm (expand on trigger) ───────────────────────── */
+.inline-confirm{display:inline-flex;align-items:center;gap:4px;overflow:hidden}
+.inline-confirm-actions{display:inline-flex;align-items:center;gap:4px;max-width:0;overflow:hidden;transition:max-width .2s ease,opacity .2s ease;opacity:0}
+.inline-confirm.active .inline-confirm-actions{max-width:200px;opacity:1}
 </style>
 </head>
 <body>
