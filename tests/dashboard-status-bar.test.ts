@@ -279,3 +279,105 @@ describe("US-003: Move Auto-Refresh note into the status bar", () => {
     );
   });
 });
+
+describe("US-004: Add 'Last refreshed' timestamp to the status bar", () => {
+  const html = fs.readFileSync(htmlPath, "utf8");
+  const distHtml = fs.readFileSync(distHtmlPath, "utf8");
+
+  it("<span id=\"last-refreshed\"> exists in the HTML", () => {
+    assert.ok(
+      html.includes('<span id="last-refreshed">'),
+      'Expected <span id="last-refreshed"> in src/server/index.html'
+    );
+  });
+
+  it("<span id=\"last-refreshed\"> is inside #status-bar", () => {
+    const statusBarIdx = html.indexOf('<footer id="status-bar">');
+    const footerCloseIdx = html.indexOf("</footer>", statusBarIdx);
+    const lastRefreshedIdx = html.indexOf('id="last-refreshed"');
+    assert.ok(statusBarIdx !== -1, "footer#status-bar should exist");
+    assert.ok(lastRefreshedIdx !== -1, "#last-refreshed should exist");
+    assert.ok(
+      lastRefreshedIdx > statusBarIdx && lastRefreshedIdx < footerCloseIdx,
+      '#last-refreshed should be inside <footer id="status-bar">'
+    );
+  });
+
+  it("#last-refreshed initial text is 'Last refresh: —'", () => {
+    assert.ok(
+      html.includes('>Last refresh: —<'),
+      "Expected #last-refreshed to have initial text 'Last refresh: —'"
+    );
+  });
+
+  it("updateLastRefreshed() function is defined in the script", () => {
+    assert.ok(
+      html.includes("function updateLastRefreshed()"),
+      "Expected updateLastRefreshed() function to be defined"
+    );
+  });
+
+  it("updateLastRefreshed() sets text using toLocaleTimeString()", () => {
+    assert.ok(
+      html.includes("toLocaleTimeString()"),
+      "Expected toLocaleTimeString() to be used in updateLastRefreshed()"
+    );
+  });
+
+  it("updateLastRefreshed() is called after loadRuns()", () => {
+    const loadRunsIdx = html.indexOf("async function loadRuns()");
+    assert.ok(loadRunsIdx !== -1, "loadRuns() should exist");
+    // Find the closing brace of loadRuns — look for updateLastRefreshed() after loadRuns()
+    const loadRunsSection = html.slice(loadRunsIdx, loadRunsIdx + 500);
+    assert.ok(
+      loadRunsSection.includes("updateLastRefreshed()"),
+      "Expected updateLastRefreshed() to be called inside loadRuns()"
+    );
+  });
+
+  it("updateLastRefreshed() is called after loadBacklog()", () => {
+    const loadBacklogIdx = html.indexOf("async function loadBacklog()");
+    assert.ok(loadBacklogIdx !== -1, "loadBacklog() should exist");
+    const loadBacklogSection = html.slice(loadBacklogIdx, loadBacklogIdx + 300);
+    assert.ok(
+      loadBacklogSection.includes("updateLastRefreshed()"),
+      "Expected updateLastRefreshed() to be called inside loadBacklog()"
+    );
+  });
+
+  it("updateLastRefreshed() is called after loadProjects()", () => {
+    const loadProjectsIdx = html.indexOf("async function loadProjects()");
+    assert.ok(loadProjectsIdx !== -1, "loadProjects() should exist");
+    const loadProjectsSection = html.slice(loadProjectsIdx, loadProjectsIdx + 300);
+    assert.ok(
+      loadProjectsSection.includes("updateLastRefreshed()"),
+      "Expected updateLastRefreshed() to be called inside loadProjects()"
+    );
+  });
+
+  it("dist: <span id=\"last-refreshed\"> exists", () => {
+    assert.ok(
+      distHtml.includes('<span id="last-refreshed">'),
+      'Expected <span id="last-refreshed"> in dist/server/index.html'
+    );
+  });
+
+  it("dist: #last-refreshed is inside #status-bar", () => {
+    const statusBarIdx = distHtml.indexOf('<footer id="status-bar">');
+    const footerCloseIdx = distHtml.indexOf("</footer>", statusBarIdx);
+    const lastRefreshedIdx = distHtml.indexOf('id="last-refreshed"');
+    assert.ok(statusBarIdx !== -1, "footer#status-bar should exist in dist");
+    assert.ok(lastRefreshedIdx !== -1, "#last-refreshed should exist in dist");
+    assert.ok(
+      lastRefreshedIdx > statusBarIdx && lastRefreshedIdx < footerCloseIdx,
+      "#last-refreshed should be inside footer#status-bar in dist"
+    );
+  });
+
+  it("dist: updateLastRefreshed() function is defined", () => {
+    assert.ok(
+      distHtml.includes("function updateLastRefreshed()"),
+      "Expected updateLastRefreshed() function in dist/server/index.html"
+    );
+  });
+});

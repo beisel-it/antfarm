@@ -392,6 +392,7 @@ select:focus{outline:none;border-color:#8ECFC0}
     <span id="medic-label">Medic</span>
   </div>
   <span class="refresh-note" id="refresh-note">Auto-refresh: 30s</span>
+  <span id="last-refreshed">Last refresh: —</span>
 </footer>
 
 <script>
@@ -493,6 +494,7 @@ async function loadBacklog() {
   } catch {
     backlogEntries = [];
   }
+  updateLastRefreshed();
 }
 
 async function loadProjects() {
@@ -501,6 +503,7 @@ async function loadProjects() {
   } catch {
     projects = [];
   }
+  updateLastRefreshed();
 }
 
 function renderProjectsColumn() {
@@ -654,6 +657,11 @@ async function loadProjectDetail(detailsEl) {
   }
 }
 
+function updateLastRefreshed() {
+  const el = document.getElementById('last-refreshed');
+  if (el) el.textContent = 'Last refresh: ' + new Date().toLocaleTimeString();
+}
+
 async function loadRuns() {
   if (!currentWf) return;
   const [runs] = await Promise.all([
@@ -663,6 +671,7 @@ async function loadRuns() {
   ]);
   allRuns = runs;
   renderBoard(currentWf, runs);
+  updateLastRefreshed();
 }
 
 function getActiveStepId(run) {
