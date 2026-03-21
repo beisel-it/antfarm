@@ -331,6 +331,7 @@ select:focus{outline:none;border-color:#8ECFC0}
   </div>
   <button class="theme-toggle" id="theme-toggle" title="Toggle light/dark mode" aria-label="Toggle light/dark mode">☀️</button>
 </header>
+<div id="projects-bar-container"></div>
 <div class="board" id="board"><div class="empty" style="margin:auto">Select a workflow</div></div>
 <div class="medic-panel" id="medic-panel">
   <div class="medic-panel-header">Workflow Medic</div>
@@ -499,7 +500,7 @@ async function loadWorkflows() {
 function selectWorkflow(id) {
   currentWf = workflows.find(w => w.id === id) || null;
   if (currentWf) loadRuns();
-  else document.getElementById('board').innerHTML = renderProjectsColumn() + '<div class="empty" style="margin:auto">Select a workflow</div>';
+  else document.getElementById('board').innerHTML = '<div class="empty" style="margin:auto">Select a workflow</div>';
 }
 
 async function loadBacklog() {
@@ -518,7 +519,13 @@ async function loadProjects() {
   } catch {
     projects = [];
   }
+  renderProjectsBarInto();
   updateLastRefreshed();
+}
+
+function renderProjectsBarInto() {
+  const container = document.getElementById('projects-bar-container');
+  if (container) container.innerHTML = renderProjectsBar();
 }
 
 function renderProjectsColumn() {
@@ -663,12 +670,7 @@ function cancelDeleteProject(card) {
 }
 
 function rerenderProjectsColumn() {
-  const col = document.getElementById('projects-column');
-  if (!col) return;
-  const tmp = document.createElement('div');
-  tmp.innerHTML = renderProjectsColumn();
-  const newCol = tmp.firstElementChild;
-  if (newCol) col.replaceWith(newCol);
+  renderProjectsBarInto();
 }
 
 async function loadProjectDetail(detailsEl) {
@@ -1067,7 +1069,7 @@ function renderBoard(wf, runs) {
     </div>`;
   }).join('');
 
-  board.innerHTML = renderProjectsColumn() + renderBacklogColumn() + workflowColumnsHTML;
+  board.innerHTML = renderBacklogColumn() + workflowColumnsHTML;
 }
 
 const stepIcons = {done:'✓',running:'●',pending:'○',waiting:'◌',failed:'✗',error:'✗'};
@@ -1324,13 +1326,13 @@ document.getElementById('wf-select').addEventListener('change', e => selectWorkf
 initStatusFilterButtons();
 loadWorkflows();
 loadProjects().then(() => {
-  if (!currentWf) document.getElementById('board').innerHTML = renderProjectsColumn() + '<div class="empty" style="margin:auto">Select a workflow</div>';
+  if (!currentWf) document.getElementById('board').innerHTML = '<div class="empty" style="margin:auto">Select a workflow</div>';
 });
 setInterval(() => {
   if (currentWf) loadRuns();
   else {
     Promise.all([loadBacklog(), loadProjects()]).then(() => {
-      if (!currentWf) document.getElementById('board').innerHTML = renderProjectsColumn() + '<div class="empty" style="margin:auto">Select a workflow</div>';
+      if (!currentWf) document.getElementById('board').innerHTML = '<div class="empty" style="margin:auto">Select a workflow</div>';
     });
   }
 }, 30000);
