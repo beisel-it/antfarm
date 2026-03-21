@@ -418,6 +418,7 @@ let backlogEntries = [];
 let editingBacklogId = null;
 let projects = [];
 let allRuns = [];
+let selectedProjectIds = [];
 let lastRefreshTime = Date.now();
 
 // ── Status filters ───────────────────────────────────────────────
@@ -558,6 +559,40 @@ function renderProjectsColumn() {
     </div>
     <button class="project-add-btn" id="project-add-btn" onclick="showAddProjectForm()">+ Add Project</button>
   </div>`;
+}
+
+function renderProjectsBar() {
+  const badgesHTML = projects.map(p => {
+    const isSelected = selectedProjectIds.includes(p.id);
+    return `<div class="project-badge${isSelected ? ' selected' : ''}" data-project-id="${esc(p.id)}" onclick="toggleProjectSelection('${esc(p.id)}')">
+      <span class="project-badge-name">${esc(p.name)}</span>
+      <span class="project-badge-actions">
+        <button class="project-badge-edit-btn" onclick="event.stopPropagation();editProject('${esc(p.id)}')" title="Edit project">✎</button>
+        <button class="project-badge-delete-btn" onclick="event.stopPropagation();deleteProject('${esc(p.id)}', this)" title="Delete project">✕</button>
+      </span>
+    </div>`;
+  }).join('');
+  return `<div class="projects-bar" id="projects-bar">
+    <div class="projects-bar-inner">
+      ${badgesHTML}
+      <button class="project-badge-new-btn" onclick="showAddProjectForm()">+ New</button>
+    </div>
+  </div>`;
+}
+
+function toggleProjectSelection(id) {
+  const idx = selectedProjectIds.indexOf(id);
+  if (idx === -1) {
+    selectedProjectIds.push(id);
+  } else {
+    selectedProjectIds.splice(idx, 1);
+  }
+  const bar = document.getElementById('projects-bar');
+  if (bar) {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = renderProjectsBar();
+    bar.replaceWith(tmp.firstElementChild);
+  }
 }
 
 function showAddProjectForm() {
