@@ -393,6 +393,7 @@ select:focus{outline:none;border-color:#8ECFC0}
   </div>
   <span class="refresh-note" id="refresh-note">Auto-refresh: 30s</span>
   <span id="last-refreshed">Last refresh: —</span>
+  <span id="next-refresh">Next: 30s</span>
 </footer>
 
 <script>
@@ -405,6 +406,7 @@ let backlogEntries = [];
 let editingBacklogId = null;
 let projects = [];
 let allRuns = [];
+let lastRefreshTime = Date.now();
 
 // ── Status filters ───────────────────────────────────────────────
 const STATUS_FILTER_KEY = 'antfarm-status-filter';
@@ -660,6 +662,7 @@ async function loadProjectDetail(detailsEl) {
 function updateLastRefreshed() {
   const el = document.getElementById('last-refreshed');
   if (el) el.textContent = 'Last refresh: ' + new Date().toLocaleTimeString();
+  lastRefreshTime = Date.now();
 }
 
 async function loadRuns() {
@@ -1287,6 +1290,17 @@ setInterval(() => {
     });
   }
 }, 30000);
+
+setInterval(() => {
+  const el = document.getElementById('next-refresh');
+  if (!el) return;
+  const remaining = 30 - Math.floor((Date.now() - lastRefreshTime) / 1000);
+  if (remaining <= 0) {
+    el.textContent = 'Refreshing...';
+  } else {
+    el.textContent = 'Next: ' + remaining + 's';
+  }
+}, 1000);
 
 // ── Medic ───────────────────────────────────────────────────────
 let medicPanelOpen = false;

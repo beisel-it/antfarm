@@ -381,3 +381,104 @@ describe("US-004: Add 'Last refreshed' timestamp to the status bar", () => {
     );
   });
 });
+
+describe("US-005: Countdown timer to next auto-refresh", () => {
+  const html = fs.readFileSync(htmlPath, "utf8");
+  const distHtml = fs.readFileSync(distHtmlPath, "utf8");
+
+  it('<span id="next-refresh"> exists in the HTML', () => {
+    assert.ok(
+      html.includes('<span id="next-refresh">'),
+      'Expected <span id="next-refresh"> in src/server/index.html'
+    );
+  });
+
+  it("#next-refresh is inside #status-bar", () => {
+    const statusBarIdx = html.indexOf('<footer id="status-bar">');
+    const footerCloseIdx = html.indexOf("</footer>", statusBarIdx);
+    const nextRefreshIdx = html.indexOf('id="next-refresh"');
+    assert.ok(statusBarIdx !== -1, "footer#status-bar should exist");
+    assert.ok(nextRefreshIdx !== -1, "#next-refresh should exist");
+    assert.ok(
+      nextRefreshIdx > statusBarIdx && nextRefreshIdx < footerCloseIdx,
+      "#next-refresh should be inside footer#status-bar"
+    );
+  });
+
+  it("#next-refresh initial text is 'Next: 30s'", () => {
+    assert.ok(
+      html.includes(">Next: 30s<"),
+      "Expected #next-refresh to have initial text 'Next: 30s'"
+    );
+  });
+
+  it("lastRefreshTime variable is declared", () => {
+    assert.ok(
+      html.includes("let lastRefreshTime = Date.now()"),
+      "Expected 'let lastRefreshTime = Date.now()' in script"
+    );
+  });
+
+  it("countdown setInterval with 1000ms is defined", () => {
+    assert.ok(
+      html.includes(", 1000);"),
+      "Expected setInterval(..., 1000) for countdown timer"
+    );
+  });
+
+  it("countdown interval computes remaining using lastRefreshTime", () => {
+    // Find the 1000ms setInterval and check it contains the countdown logic
+    const intervalIdx = html.indexOf("'next-refresh'");
+    assert.ok(intervalIdx !== -1, "Expected 'next-refresh' in setInterval");
+    const intervalSection = html.slice(intervalIdx, intervalIdx + 300);
+    assert.ok(
+      intervalSection.includes("lastRefreshTime"),
+      "Expected lastRefreshTime in countdown setInterval"
+    );
+  });
+
+  it("countdown shows 'Refreshing...' when remaining <= 0", () => {
+    const intervalIdx = html.indexOf("'next-refresh'");
+    const intervalSection = html.slice(intervalIdx, intervalIdx + 300);
+    assert.ok(
+      intervalSection.includes("Refreshing..."),
+      "Expected 'Refreshing...' text in countdown setInterval"
+    );
+  });
+
+  it("updateLastRefreshed() resets lastRefreshTime", () => {
+    const fnIdx = html.indexOf("function updateLastRefreshed()");
+    assert.ok(fnIdx !== -1, "updateLastRefreshed() should exist");
+    const fnSection = html.slice(fnIdx, fnIdx + 200);
+    assert.ok(
+      fnSection.includes("lastRefreshTime = Date.now()"),
+      "Expected lastRefreshTime = Date.now() inside updateLastRefreshed()"
+    );
+  });
+
+  it("dist: <span id=\"next-refresh\"> exists", () => {
+    assert.ok(
+      distHtml.includes('<span id="next-refresh">'),
+      'Expected <span id="next-refresh"> in dist/server/index.html'
+    );
+  });
+
+  it("dist: #next-refresh is inside #status-bar", () => {
+    const statusBarIdx = distHtml.indexOf('<footer id="status-bar">');
+    const footerCloseIdx = distHtml.indexOf("</footer>", statusBarIdx);
+    const nextRefreshIdx = distHtml.indexOf('id="next-refresh"');
+    assert.ok(statusBarIdx !== -1, "footer#status-bar should exist in dist");
+    assert.ok(nextRefreshIdx !== -1, "#next-refresh should exist in dist");
+    assert.ok(
+      nextRefreshIdx > statusBarIdx && nextRefreshIdx < footerCloseIdx,
+      "#next-refresh should be inside footer#status-bar in dist"
+    );
+  });
+
+  it("dist: countdown setInterval exists", () => {
+    assert.ok(
+      distHtml.includes(", 1000);"),
+      "Expected setInterval(..., 1000) in dist/server/index.html"
+    );
+  });
+});
