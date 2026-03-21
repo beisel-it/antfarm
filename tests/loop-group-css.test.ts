@@ -29,23 +29,15 @@ describe('Loop group CSS classes in dist/server/index.html', () => {
     assert.ok(hasIndent, '.loop-group-steps should have padding-left or margin-left indent');
   });
 
-  test('AC3: .loop-badge CSS class exists and produces a circular element', () => {
-    assert.ok(html.includes('.loop-badge'), '.loop-badge class should exist');
-    assert.ok(
-      /\.loop-badge\{[^}]*border-radius:50%/.test(html),
-      '.loop-badge should be circular (border-radius: 50%)'
-    );
+  test('AC3: .loop-badge CSS class is removed (replaced by .loop-counter in header)', () => {
+    // US-002: The circular badge was replaced by an inline counter in the header
+    const cssSection = html.slice(html.indexOf('<style'), html.indexOf('</style>'));
+    assert.ok(!cssSection.includes('.loop-badge{'), '.loop-badge CSS rule should be removed (replaced by .loop-counter)');
   });
 
-  test('AC4: Loop badge uses conic-gradient or SVG for filling arc', () => {
-    // The badge uses SVG inline approach (conic-gradient applied via SVG or inline)
-    // We check that the badge wrapper exists and badge uses a fill approach
-    const hasConic = html.includes('conic-gradient');
-    const hasSvg = html.includes('.loop-badge svg') || html.includes('loop-badge') && html.includes('<svg');
-    assert.ok(
-      hasConic || hasSvg,
-      'Loop badge should use conic-gradient or SVG to show filling arc'
-    );
+  test('AC4: .loop-counter CSS class exists (replaces old conic-gradient badge)', () => {
+    // US-002: Counter is now an inline span in the header, not a conic-gradient badge
+    assert.ok(html.includes('.loop-counter'), '.loop-counter CSS class should exist');
   });
 
   test('AC5: Loop group uses CSS custom properties that work in dark theme (accent-teal token)', () => {
@@ -73,8 +65,9 @@ describe('Loop group CSS classes in dist/server/index.html', () => {
     assert.ok(html.includes('.loop-group-label'), '.loop-group-label class should exist');
   });
 
-  test('AC7: .loop-badge-wrapper CSS class exists for positioning', () => {
-    assert.ok(html.includes('.loop-badge-wrapper'), '.loop-badge-wrapper class should exist');
+  test('AC7: .loop-badge-wrapper CSS class is removed (no longer needed)', () => {
+    // US-002: Badge wrapper between steps removed; counter is now in the header
+    assert.ok(!html.includes('.loop-badge-wrapper'), '.loop-badge-wrapper CSS class should be removed');
   });
 
   test('US-001 AC1: .loop-group-label::before with content ↻ is removed', () => {

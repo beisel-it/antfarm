@@ -176,10 +176,7 @@ select:focus{outline:none;border-color:#8ECFC0}
 .loop-group-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--accent-teal);margin-bottom:6px;padding-left:4px;display:flex;align-items:center;gap:6px}
 .loop-counter{display:inline-flex;align-items:center;font-size:9px;font-weight:700;color:var(--accent-teal);border:1px solid var(--accent-teal);border-radius:4px;padding:1px 5px;letter-spacing:.3px;line-height:1.4;flex-shrink:0}
 .loop-group-steps{display:flex;flex-direction:column;gap:6px;padding-left:12px}
-.loop-badge-wrapper{display:flex;justify-content:flex-start;align-items:center;padding-left:8px;margin:-2px 0}
-.loop-badge{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--bg-surface,#fff);border:2px solid var(--accent-teal);position:relative;overflow:hidden;flex-shrink:0}
-.loop-badge svg{width:28px;height:28px}
-.loop-badge-text{position:absolute;font-size:8px;font-weight:700;color:var(--accent-teal);z-index:1;line-height:1}
+
 
 /* ── Badges ────────────────────────────────────────────────────── */
 .badge{font-size:10px;font-weight:600;padding:2px 6px;border-radius:4px;text-transform:uppercase}
@@ -1068,11 +1065,8 @@ function renderRunPanel(run, stories) {
   // Build a map from step UUID to loop group index for quick lookup
   const loopGroups = run.loopGroups || [];
   const stepToGroupIdx = new Map();
-  // Build a set of verify step IDs so we can inject the badge before them
-  const verifyStepIds = new Set();
   loopGroups.forEach((g, idx) => {
     (g.stepIds || []).forEach(sid => stepToGroupIdx.set(sid, idx));
-    if (g.verifyStepId) verifyStepIds.add(g.verifyStepId);
   });
   function renderStepRow(s) {
     const st = s.status || 'waiting';
@@ -1107,12 +1101,12 @@ function renderRunPanel(run, stories) {
       currentGroupIdx = gIdx;
       // Open new group if entering a loop group
       if (gIdx !== null) {
-        parts.push(`<div class="loop-group"><div class="loop-group-label">Repeating loop</div><div class="loop-group-steps">`);
+        const loopStories = stories;
+        const total = (loopStories || []).length;
+        const done = (loopStories || []).filter(s => s.status === 'done').length;
+        const counter = `<span class="loop-counter" title="Loop progress: ${done}/${total}">${done}/${total}</span>`;
+        parts.push(`<div class="loop-group"><div class="loop-group-label">Repeating loop ${counter}</div><div class="loop-group-steps">`);
       }
-    }
-    // Inject badge before verify step (between implement and verify rows)
-    if (verifyStepIds.has(s.id)) {
-      parts.push(renderLoopBadge(stories));
     }
     parts.push(renderStepRow(s));
   });
