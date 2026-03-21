@@ -482,3 +482,145 @@ describe("US-005: Countdown timer to next auto-refresh", () => {
     );
   });
 });
+
+describe("US-006: Integration tests for status bar structure and behaviour", () => {
+  const html = fs.readFileSync(htmlPath, "utf8");
+  const distHtml = fs.readFileSync(distHtmlPath, "utf8");
+
+  // --- Structure tests ---
+
+  it("#status-bar exists in the HTML source", () => {
+    assert.ok(
+      html.includes('id="status-bar"'),
+      'Expected id="status-bar" in src/server/index.html'
+    );
+  });
+
+  it("medic-badge is inside #status-bar (not in header)", () => {
+    const statusBarIdx = html.indexOf('<footer id="status-bar">');
+    const footerCloseIdx = html.indexOf("</footer>", statusBarIdx);
+    const medicBadgeIdx = html.indexOf('id="medic-badge"');
+    assert.ok(statusBarIdx !== -1, "footer#status-bar should exist");
+    assert.ok(medicBadgeIdx !== -1, "medic-badge should exist");
+    assert.ok(
+      medicBadgeIdx > statusBarIdx && medicBadgeIdx < footerCloseIdx,
+      "medic-badge should be inside #status-bar"
+    );
+    const headerStart = html.indexOf("<header");
+    const headerEnd = html.indexOf("</header>");
+    assert.ok(
+      !(medicBadgeIdx > headerStart && medicBadgeIdx < headerEnd),
+      "medic-badge should NOT be inside <header>"
+    );
+  });
+
+  it("#refresh-note is inside #status-bar (not in header)", () => {
+    const statusBarIdx = html.indexOf('<footer id="status-bar">');
+    const footerCloseIdx = html.indexOf("</footer>", statusBarIdx);
+    const refreshNoteIdx = html.indexOf('id="refresh-note"');
+    assert.ok(statusBarIdx !== -1, "footer#status-bar should exist");
+    assert.ok(refreshNoteIdx !== -1, "#refresh-note should exist");
+    assert.ok(
+      refreshNoteIdx > statusBarIdx && refreshNoteIdx < footerCloseIdx,
+      "#refresh-note should be inside #status-bar"
+    );
+    const headerStart = html.indexOf("<header");
+    const headerEnd = html.indexOf("</header>");
+    assert.ok(
+      !(refreshNoteIdx > headerStart && refreshNoteIdx < headerEnd),
+      "#refresh-note should NOT be inside <header>"
+    );
+  });
+
+  it("#last-refreshed exists inside #status-bar", () => {
+    const statusBarIdx = html.indexOf('<footer id="status-bar">');
+    const footerCloseIdx = html.indexOf("</footer>", statusBarIdx);
+    const lastRefreshedIdx = html.indexOf('id="last-refreshed"');
+    assert.ok(statusBarIdx !== -1, "footer#status-bar should exist");
+    assert.ok(lastRefreshedIdx !== -1, "#last-refreshed should exist");
+    assert.ok(
+      lastRefreshedIdx > statusBarIdx && lastRefreshedIdx < footerCloseIdx,
+      "#last-refreshed should be inside #status-bar"
+    );
+  });
+
+  it("#next-refresh exists inside #status-bar", () => {
+    const statusBarIdx = html.indexOf('<footer id="status-bar">');
+    const footerCloseIdx = html.indexOf("</footer>", statusBarIdx);
+    const nextRefreshIdx = html.indexOf('id="next-refresh"');
+    assert.ok(statusBarIdx !== -1, "footer#status-bar should exist");
+    assert.ok(nextRefreshIdx !== -1, "#next-refresh should exist");
+    assert.ok(
+      nextRefreshIdx > statusBarIdx && nextRefreshIdx < footerCloseIdx,
+      "#next-refresh should be inside #status-bar"
+    );
+  });
+
+  // --- Countdown arithmetic test ---
+
+  it("countdown logic: given lastRefreshTime = now - 10000, remaining should be 20", () => {
+    // Verify the formula is present in the source
+    assert.ok(
+      html.includes("30 - Math.floor((Date.now() - lastRefreshTime) / 1000)"),
+      "Expected countdown formula '30 - Math.floor((Date.now() - lastRefreshTime) / 1000)' in script"
+    );
+    // Simulate the formula: 10 seconds elapsed → remaining = 30 - 10 = 20
+    const interval = 30;
+    const lastRefreshTime = Date.now() - 10000;
+    const remaining = interval - Math.floor((Date.now() - lastRefreshTime) / 1000);
+    // remaining should be approximately 20 (allow ±1 for timing jitter)
+    assert.ok(
+      remaining >= 19 && remaining <= 21,
+      `Expected remaining to be ~20 when lastRefreshTime is 10s ago, got ${remaining}`
+    );
+  });
+
+  // --- updateLastRefreshed() format test ---
+
+  it("updateLastRefreshed() uses toLocaleTimeString() to format the time", () => {
+    const fnIdx = html.indexOf("function updateLastRefreshed()");
+    assert.ok(fnIdx !== -1, "updateLastRefreshed() should be defined");
+    const fnSection = html.slice(fnIdx, fnIdx + 300);
+    assert.ok(
+      fnSection.includes("toLocaleTimeString()"),
+      "Expected toLocaleTimeString() inside updateLastRefreshed() function"
+    );
+  });
+
+  it("updateLastRefreshed() sets text with 'Last refresh: ' prefix", () => {
+    const fnIdx = html.indexOf("function updateLastRefreshed()");
+    assert.ok(fnIdx !== -1, "updateLastRefreshed() should be defined");
+    const fnSection = html.slice(fnIdx, fnIdx + 300);
+    assert.ok(
+      fnSection.includes("'Last refresh: '"),
+      "Expected 'Last refresh: ' prefix in updateLastRefreshed() output"
+    );
+  });
+
+  it("updateLastRefreshed() resets lastRefreshTime = Date.now()", () => {
+    const fnIdx = html.indexOf("function updateLastRefreshed()");
+    assert.ok(fnIdx !== -1, "updateLastRefreshed() should be defined");
+    const fnSection = html.slice(fnIdx, fnIdx + 200);
+    assert.ok(
+      fnSection.includes("lastRefreshTime = Date.now()"),
+      "Expected lastRefreshTime = Date.now() inside updateLastRefreshed()"
+    );
+  });
+
+  // --- dist file verification ---
+
+  it("dist: all five status bar elements exist", () => {
+    assert.ok(distHtml.includes('id="status-bar"'), "dist: #status-bar should exist");
+    assert.ok(distHtml.includes('id="medic-badge"'), "dist: medic-badge should exist");
+    assert.ok(distHtml.includes('id="refresh-note"'), "dist: #refresh-note should exist");
+    assert.ok(distHtml.includes('id="last-refreshed"'), "dist: #last-refreshed should exist");
+    assert.ok(distHtml.includes('id="next-refresh"'), "dist: #next-refresh should exist");
+  });
+
+  it("dist: countdown formula uses 30s interval", () => {
+    assert.ok(
+      distHtml.includes("30 - Math.floor((Date.now() - lastRefreshTime) / 1000)"),
+      "Expected countdown formula in dist/server/index.html"
+    );
+  });
+});
