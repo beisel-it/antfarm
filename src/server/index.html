@@ -431,6 +431,33 @@ select:focus{outline:none;border-color:#8ECFC0}
   </div>
 </div>
 
+<!-- Add Project Modal -->
+<div class="overlay" id="add-project-modal-overlay" style="display:none" onclick="if(event.target===this)closeAddProjectModal()">
+  <div class="panel" id="add-project-modal">
+    <button class="panel-close" onclick="closeAddProjectModal()">✕</button>
+    <h2>New Project</h2>
+    <form id="add-project-modal-form" onsubmit="return false">
+      <div class="backlog-modal-field">
+        <label for="ap-name">Name <span style="color:var(--accent-orange)">*</span></label>
+        <input type="text" id="ap-name" required placeholder="Project name">
+        <span id="ap-name-error" style="color:var(--accent-orange);font-size:11px;display:none">Name is required</span>
+      </div>
+      <div class="backlog-modal-field">
+        <label for="ap-git-path">Git Repo Path</label>
+        <input type="text" id="ap-git-path" placeholder="/path/to/repo">
+      </div>
+      <div class="backlog-modal-field">
+        <label for="ap-github-url">GitHub Repo URL</label>
+        <input type="text" id="ap-github-url" placeholder="https://github.com/owner/repo">
+      </div>
+      <div class="backlog-modal-actions">
+        <button type="button" id="ap-save-btn" class="backlog-modal-save-btn" onclick="submitAddProjectModal()">Create</button>
+        <button type="button" class="backlog-modal-cancel-btn" onclick="closeAddProjectModal()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <footer id="status-bar">
   <div class="medic-badge" id="medic-badge" onclick="toggleMedicPanel()" title="Medic watchdog status">
     <span class="medic-dot unknown" id="medic-dot"></span>
@@ -652,7 +679,7 @@ function renderProjectsBar() {
   return `<div class="projects-bar" id="projects-bar">
     <div class="projects-bar-inner">
       ${badgesHTML}
-      <button class="project-badge-new-btn" onclick="showAddProjectForm()">+ New</button>
+      <button class="project-badge-new-btn" onclick="showProjectAddModal()">+ New</button>
     </div>
   </div>`;
 }
@@ -722,6 +749,57 @@ async function submitAddProject() {
     await loadProjects();
     rerenderProjectsColumn();
   } catch { /* ignore */ }
+}
+
+function showProjectAddModal() {
+  const overlay = document.getElementById('add-project-modal-overlay');
+  if (overlay) overlay.style.display = 'flex';
+  const nameInput = document.getElementById('ap-name');
+  const gitInput = document.getElementById('ap-git-path');
+  const urlInput = document.getElementById('ap-github-url');
+  const errEl = document.getElementById('ap-name-error');
+  if (nameInput) nameInput.value = '';
+  if (gitInput) gitInput.value = '';
+  if (urlInput) urlInput.value = '';
+  if (errEl) errEl.style.display = 'none';
+  if (nameInput) nameInput.focus();
+}
+
+function closeAddProjectModal() {
+  const overlay = document.getElementById('add-project-modal-overlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+async function submitAddProjectModal() {
+  const nameEl = document.getElementById('ap-name');
+  const gitEl = document.getElementById('ap-git-path');
+  const urlEl = document.getElementById('ap-github-url');
+  const errEl = document.getElementById('ap-name-error');
+  const name = nameEl ? nameEl.value.trim() : '';
+  if (!name) {
+    if (errEl) errEl.style.display = '';
+    if (nameEl) nameEl.focus();
+    return;
+  }
+  if (errEl) errEl.style.display = 'none';
+  const body = { name };
+  const gitPath = gitEl ? gitEl.value.trim() : '';
+  const ghUrl = urlEl ? urlEl.value.trim() : '';
+  if (gitPath) body.gitRepoPath = gitPath;
+  if (ghUrl) body.githubRepoUrl = ghUrl;
+  try {
+    const r = await fetch(API + '/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) return;
+    closeAddProjectModal();
+    await loadProjects();
+    rerenderProjectsColumn();
+  } catch (e) {
+    console.error('Failed to create project', e);
+  }
 }
 
 let editingProjectId = null;
