@@ -272,6 +272,21 @@ select:focus{outline:none;border-color:#8ECFC0}
 .project-add-btn{display:block;background:none;border:1px dashed var(--border);border-radius:4px;color:var(--text-secondary);cursor:pointer;font-size:11px;padding:5px;margin:4px 8px 8px;width:calc(100% - 16px);text-align:center;transition:border-color .15s,color .15s}
 .project-add-btn:hover{border-color:var(--accent-green);color:var(--accent-green)}
 
+/* ── Projects horizontal bar ─────────────────────────────────────── */
+.projects-bar{width:100%;background:var(--bg-surface);border-bottom:1px solid var(--border);padding:6px 16px;box-sizing:border-box;flex-shrink:0}
+.projects-bar-inner{display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;gap:6px;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none}
+.projects-bar-inner::-webkit-scrollbar{display:none}
+.project-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:12px;border:1px solid var(--border);background:var(--bg-surface-alt);color:var(--text-primary);font-size:12px;font-weight:500;cursor:pointer;user-select:none;white-space:nowrap;transition:border-color .15s,background .15s}
+.project-badge:hover{border-color:var(--accent-green)}
+.project-badge.selected{background:var(--accent-green);border-color:var(--accent-green);color:#fff}
+.project-badge-actions{display:inline-flex;align-items:center;gap:2px;margin-left:2px}
+.project-badge-edit-btn,.project-badge-delete-btn{background:none;border:none;cursor:pointer;padding:1px 3px;border-radius:3px;font-size:11px;line-height:1;color:inherit;opacity:.7;transition:opacity .15s}
+.project-badge-edit-btn:hover,.project-badge-delete-btn:hover{opacity:1}
+.project-badge.selected .project-badge-edit-btn,.project-badge.selected .project-badge-delete-btn{color:#fff}
+.project-badge-new-btn{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:12px;border:1px dashed var(--border);background:none;color:var(--text-secondary);font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;transition:border-color .15s,color .15s}
+.project-badge-new-btn:hover{border-color:var(--accent-green);color:var(--accent-green)}
+.board-wrapper{display:flex;flex-direction:column;min-height:calc(100vh - 57px)}
+
 /* ── Confirmation modal ────────────────────────────────────────── */
 .confirm-modal-backdrop{position:fixed;inset:0;background:var(--overlay);z-index:200;display:flex;align-items:center;justify-content:center}
 .confirm-modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--bg-surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 32px var(--shadow-heavy);z-index:201;padding:20px 24px;min-width:280px;max-width:440px;width:100%}
