@@ -754,10 +754,34 @@ function updateLastRefreshed() {
   lastRefreshTime = Date.now();
 }
 
+async function fetchRunsForProjects(pids) {
+  if (pids.length === 1) {
+    return fetchJSON(`/api/runs?workflow=${encodeURIComponent(currentWf.id)}&project=${encodeURIComponent(pids[0])}`);
+  }
+  // Multi-select: fetch in parallel, merge and deduplicate
+  const results = await Promise.all(
+    pids.map(pid => fetchJSON(`/api/runs?workflow=${encodeURIComponent(currentWf.id)}&project=${encodeURIComponent(pid)}`))
+  );
+  const seen = new Set();
+  const merged = [];
+  for (const runs of results) {
+    for (const run of runs) {
+      if (!seen.has(run.id)) {
+        seen.add(run.id);
+        merged.push(run);
+      }
+    }
+  }
+  return merged;
+}
+
 async function loadRuns() {
   if (!currentWf) return;
+  const runsPromise = selectedProjectIds.length === 0
+    ? fetchJSON(`/api/runs?workflow=${currentWf.id}`)
+    : fetchRunsForProjects(selectedProjectIds);
   const [runs] = await Promise.all([
-    fetchJSON(`/api/runs?workflow=${currentWf.id}`),
+    runsPromise,
     loadBacklog(),
     loadProjects(),
   ]);
