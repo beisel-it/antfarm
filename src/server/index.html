@@ -260,6 +260,16 @@ select:focus{outline:none;border-color:#8ECFC0}
 .project-form-btns{display:flex;gap:6px}
 .project-form-submit{background:var(--accent-green);color:#fff;border:none;border-radius:4px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer}
 .project-form-submit:hover{opacity:.85}
+.backlog-add-btn{background:var(--accent-green);color:#fff;border:none;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:600;cursor:pointer;transition:opacity .15s;flex-shrink:0}
+.backlog-add-btn:hover{opacity:.85}
+.backlog-modal-field{display:flex;flex-direction:column;gap:4px;margin-bottom:14px}
+.backlog-modal-field label{font-size:12px;font-weight:500;color:var(--text-secondary);margin-bottom:4px}
+.backlog-modal-field input,.backlog-modal-field textarea{background:var(--bg-surface);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:12px;padding:5px 8px;width:100%;font-family:inherit;resize:vertical;outline:none;transition:border-color .15s;box-sizing:border-box}
+.backlog-modal-field input:focus,.backlog-modal-field textarea:focus{border-color:var(--accent-teal)}
+.backlog-modal-actions{display:flex;flex-direction:row;justify-content:flex-end;gap:8px;margin-top:4px}
+.backlog-modal-save-btn{background:var(--accent-green);color:#fff;border:none;border-radius:4px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer;transition:opacity .15s}
+.backlog-modal-save-btn:hover{opacity:.85}
+.backlog-modal-cancel-btn{background:none;border:1px solid var(--border);border-radius:4px;padding:3px 10px;font-size:11px;color:var(--text-secondary);cursor:pointer}
 .project-form-cancel{background:none;border:1px solid var(--border);border-radius:4px;padding:3px 10px;font-size:11px;color:var(--text-secondary);cursor:pointer}
 .project-add-btn{display:block;background:none;border:1px dashed var(--border);border-radius:4px;color:var(--text-secondary);cursor:pointer;font-size:11px;padding:5px;margin:4px 8px 8px;width:calc(100% - 16px);text-align:center;transition:border-color .15s,color .15s}
 .project-add-btn:hover{border-color:var(--accent-green);color:var(--accent-green)}
@@ -290,6 +300,42 @@ select:focus{outline:none;border-color:#8ECFC0}
 <div class="overlay" id="overlay" onclick="if(event.target===this)closePanel()">
   <div class="panel" id="panel"></div>
 </div>
+<div class="overlay" id="backlog-modal-overlay" style="display:none" onclick="if(event.target===this)closeBacklogModal()">
+  <div class="panel" id="backlog-modal">
+    <button class="panel-close" onclick="closeBacklogModal()">✕</button>
+    <h2 id="backlog-modal-title-heading">New Backlog Entry</h2>
+    <form id="backlog-modal-form" onsubmit="return false">
+      <div class="backlog-modal-field">
+        <label for="bm-title">Title <span style="color:var(--accent-orange)">*</span></label>
+        <input type="text" id="bm-title" required placeholder="Entry title">
+      </div>
+      <div class="backlog-modal-field">
+        <label for="bm-description">Description</label>
+        <textarea id="bm-description" rows="4" placeholder="Describe the backlog entry"></textarea>
+      </div>
+      <div class="backlog-modal-field">
+        <label for="bm-criteria">Acceptance Criteria</label>
+        <textarea id="bm-criteria" rows="4" placeholder="- Criterion 1&#10;- Criterion 2"></textarea>
+      </div>
+      <div class="backlog-modal-field">
+        <label for="bm-notes">Notes</label>
+        <textarea id="bm-notes" rows="3" placeholder="Additional notes"></textarea>
+      </div>
+      <div class="backlog-modal-field">
+        <label for="bm-tags">Tags (comma-separated)</label>
+        <input type="text" id="bm-tags" placeholder="tag1, tag2, tag3">
+      </div>
+      <div class="backlog-modal-field">
+        <label for="bm-priority">Priority (0–10)</label>
+        <input type="number" id="bm-priority" min="0" max="10" placeholder="5">
+      </div>
+      <div class="backlog-modal-actions">
+        <button type="button" id="backlog-save-btn" class="backlog-modal-save-btn" onclick="submitBacklogForm()">Save</button>
+        <button type="button" class="backlog-modal-cancel-btn" onclick="closeBacklogModal()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
 
 <script>
 const API = '';
@@ -298,6 +344,7 @@ let currentWf = null;
 let openRunId = null;
 let openRunRefreshInterval = null;
 let backlogEntries = [];
+let editingBacklogId = null;
 let projects = [];
 let allRuns = [];
 
@@ -569,7 +616,7 @@ function renderBacklogColumn() {
         const dispatchDisabled = isDispatched || hasActiveRun ? 'disabled' : '';
         const dispatchClass = hasActiveRun ? 'backlog-dispatch-btn backlog-dispatch-btn--blocked' : 'backlog-dispatch-btn';
         const dispatchTitle = hasActiveRun ? 'title="Project run already in flight"' : '';
-        return `<div class="backlog-card ${cls}" data-backlog-id="${entry.id}" data-backlog-title="${esc(entry.title)}">
+        return `<div class="backlog-card ${cls}" data-backlog-id="${entry.id}" data-backlog-title="${esc(entry.title)}" onclick="openBacklogEntryEdit('${entry.id}')" style="cursor:pointer">
           <div class="backlog-card-title" title="${esc(entry.title)}">${checkIcon}${esc(entry.title)}</div>
           <div class="backlog-card-error" style="display:none;color:var(--status-failed,#e05);font-size:11px;margin-top:4px"></div>
           <div class="backlog-card-meta">
@@ -577,15 +624,142 @@ function renderBacklogColumn() {
               <span class="badge badge-${entry.status} backlog-status-badge">${entry.status}</span>
               ${priorityBadge}
             </span>
-            <button class="${dispatchClass}" onclick="dispatchBacklogEntry('${entry.id}',this)" ${dispatchDisabled} ${dispatchTitle}>${btnLabel}</button>
-            <button class="backlog-delete-btn" onclick="deleteBacklogEntry('${entry.id}',this)" title="Delete">✕</button>
+            <button class="${dispatchClass}" onclick="event.stopPropagation();dispatchBacklogEntry('${entry.id}',this)" ${dispatchDisabled} ${dispatchTitle}>${btnLabel}</button>
+            <button class="backlog-delete-btn" onclick="event.stopPropagation();deleteBacklogEntry('${entry.id}',this)" title="Delete">✕</button>
           </div>
         </div>`;
       }).join('');
   return `<div class="column" id="backlog-column">
-    <div class="column-header">Backlog<span class="count">${entries.length}</span></div>
+    <div class="column-header" style="display:flex;justify-content:space-between;align-items:center">
+      <span>Backlog<span class="count">${entries.length}</span></span>
+      <button class="backlog-add-btn" onclick="openBacklogForm()">+ Add</button>
+    </div>
     <div class="cards">${cardHTML}</div>
   </div>`;
+}
+
+function openBacklogForm() {
+  editingBacklogId = null;
+  const overlay = document.getElementById('backlog-modal-overlay');
+  const heading = document.getElementById('backlog-modal-title-heading');
+  document.getElementById('bm-title').value = '';
+  document.getElementById('bm-description').value = '';
+  document.getElementById('bm-criteria').value = '';
+  document.getElementById('bm-notes').value = '';
+  document.getElementById('bm-tags').value = '';
+  document.getElementById('bm-priority').value = '';
+  heading.textContent = 'New Backlog Entry';
+  overlay.style.display = 'flex';
+  overlay.classList.add('open');
+  document.getElementById('bm-title').focus();
+}
+
+function openBacklogEntryEdit(id) {
+  const entry = backlogEntries.find(e => e.id === id);
+  if (!entry) return;
+  editingBacklogId = id;
+  const overlay = document.getElementById('backlog-modal-overlay');
+  const heading = document.getElementById('backlog-modal-title-heading');
+  document.getElementById('bm-title').value = entry.title || '';
+  document.getElementById('bm-description').value = entry.description || '';
+  document.getElementById('bm-criteria').value = entry.acceptance_criteria || '';
+  document.getElementById('bm-notes').value = entry.notes || '';
+  document.getElementById('bm-tags').value = entry.tags || '';
+  document.getElementById('bm-priority').value = entry.priority != null ? String(entry.priority) : '';
+  heading.textContent = 'Edit Backlog Entry';
+  overlay.style.display = 'flex';
+  overlay.classList.add('open');
+  document.getElementById('bm-title').focus();
+}
+
+function closeBacklogModal() {
+  editingBacklogId = null;
+  const overlay = document.getElementById('backlog-modal-overlay');
+  overlay.classList.remove('open');
+  overlay.style.display = 'none';
+  const form = document.getElementById('backlog-modal-form');
+  if (form) form.reset();
+}
+
+async function submitBacklogForm() {
+  const titleEl = document.getElementById('bm-title');
+  const title = titleEl.value.trim();
+  // Validation
+  let errEl = document.getElementById('bm-title-error');
+  if (!errEl) {
+    errEl = document.createElement('div');
+    errEl.id = 'bm-title-error';
+    errEl.className = 'backlog-card-error';
+    errEl.style.display = 'none';
+    titleEl.parentNode.insertBefore(errEl, titleEl.nextSibling);
+  }
+  if (!title) {
+    errEl.textContent = 'Title is required';
+    errEl.style.display = 'block';
+    titleEl.focus();
+    return;
+  }
+  errEl.style.display = 'none';
+  errEl.textContent = '';
+  const saveBtn = document.getElementById('backlog-save-btn');
+  if (saveBtn) saveBtn.disabled = true;
+  try {
+    const priorityRaw = document.getElementById('bm-priority').value;
+    if (editingBacklogId) {
+      // PATCH (edit mode) — snake_case fields
+      const body = {
+        title,
+        description: document.getElementById('bm-description').value.trim() || null,
+        notes: document.getElementById('bm-notes').value.trim() || null,
+        tags: document.getElementById('bm-tags').value.trim() || null,
+        acceptance_criteria: document.getElementById('bm-criteria').value.trim() || null,
+        priority: priorityRaw !== '' ? Number(priorityRaw) : null,
+      };
+      const r = await fetch(API + `/api/backlog/${editingBacklogId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (r.status === 200) {
+        closeBacklogModal();
+        await loadBacklog();
+        renderBoard(currentWf, runs);
+      } else {
+        const data = await r.json().catch(() => ({}));
+        errEl.textContent = (data && data.error) ? data.error : 'Failed to update entry';
+        errEl.style.display = 'block';
+      }
+    } else {
+      // POST (create mode) — camelCase fields
+      const body = {
+        title,
+        description: document.getElementById('bm-description').value.trim() || null,
+        notes: document.getElementById('bm-notes').value.trim() || null,
+        tags: document.getElementById('bm-tags').value.trim() || null,
+        acceptanceCriteria: document.getElementById('bm-criteria').value.trim() || null,
+        priority: priorityRaw !== '' ? Number(priorityRaw) : null,
+      };
+      const r = await fetch(API + '/api/backlog', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (r.status === 201) {
+        closeBacklogModal();
+        await loadBacklog();
+        renderBoard(currentWf, runs);
+      } else {
+        const data = await r.json().catch(() => ({}));
+        errEl.textContent = (data && data.error) ? data.error : 'Failed to save entry';
+        errEl.style.display = 'block';
+      }
+    }
+  } catch (e) {
+    errEl.textContent = 'Network error — please try again';
+    errEl.style.display = 'block';
+  } finally {
+    if (saveBtn) saveBtn.disabled = false;
+  }
 }
 
 async function dispatchBacklogEntry(id, btn) {
