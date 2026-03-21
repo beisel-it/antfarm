@@ -296,6 +296,12 @@ select:focus{outline:none;border-color:#8ECFC0}
 .project-inline-confirm-delete:hover{opacity:.85}
 .project-inline-confirm-cancel{background:none;border:1px solid var(--border);border-radius:3px;padding:2px 8px;font-size:11px;color:var(--text-secondary);cursor:pointer}
 .project-inline-confirm-cancel:hover{background:var(--bg-surface);color:var(--text-primary)}
+.backlog-inline-confirm{display:none;align-items:center;gap:4px;position:absolute;top:4px;right:30px;background:var(--bg-surface-alt);border:1px solid var(--border);border-radius:4px;padding:3px 6px;z-index:1}
+.backlog-inline-confirm.active{display:inline-flex}
+.backlog-inline-confirm-delete{background:var(--accent-orange);border:none;border-radius:3px;padding:2px 8px;font-size:11px;color:#fff;cursor:pointer}
+.backlog-inline-confirm-delete:hover{opacity:.85}
+.backlog-inline-confirm-cancel{background:none;border:1px solid var(--border);border-radius:3px;padding:2px 8px;font-size:11px;color:var(--text-secondary);cursor:pointer}
+.backlog-inline-confirm-cancel:hover{background:var(--bg-surface);color:var(--text-primary)}
 </style>
 </head>
 <body>
@@ -688,6 +694,10 @@ function renderBacklogColumn() {
             <button class="${dispatchClass}" onclick="event.stopPropagation();dispatchBacklogEntry('${entry.id}',this)" ${dispatchDisabled} ${dispatchTitle}>${btnLabel}</button>
             <button class="backlog-delete-btn" onclick="event.stopPropagation();deleteBacklogEntry('${entry.id}',this)" title="Delete">✕</button>
           </div>
+          <div class="backlog-inline-confirm">
+            <button class="backlog-inline-confirm-delete" onclick="event.stopPropagation();confirmDeleteBacklog('${entry.id}', this.closest('.backlog-card'))">Delete</button>
+            <button class="backlog-inline-confirm-cancel" onclick="event.stopPropagation();cancelDeleteBacklog(this.closest('.backlog-card'))">Cancel</button>
+          </div>
         </div>`;
       }).join('');
   return `<div class="column" id="backlog-column">
@@ -925,17 +935,28 @@ async function cancelRun(id, event) {
   }
 }
 
-async function deleteBacklogEntry(id, btn) {
-  if (!confirm('Delete this backlog item?')) return;
+function deleteBacklogEntry(id, btn) {
+  const card = btn.closest('.backlog-card');
+  const inlineConfirm = card && card.querySelector('.backlog-inline-confirm');
+  if (inlineConfirm) inlineConfirm.classList.add('active');
+}
+
+async function confirmDeleteBacklog(id, card) {
+  const inlineConfirm = card && card.querySelector('.backlog-inline-confirm');
+  if (inlineConfirm) inlineConfirm.classList.remove('active');
   try {
     const r = await fetch(API + '/api/backlog/' + id, { method: 'DELETE' });
     const data = await r.json();
     if (r.ok && data.ok) {
-      const card = btn.closest('[data-backlog-id]');
       if (card) card.remove();
       await loadBacklog();
     }
   } catch { /* ignore */ }
+}
+
+function cancelDeleteBacklog(card) {
+  const inlineConfirm = card && card.querySelector('.backlog-inline-confirm');
+  if (inlineConfirm) inlineConfirm.classList.remove('active');
 }
 
 function renderBoard(wf, runs) {
