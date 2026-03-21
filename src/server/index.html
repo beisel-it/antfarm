@@ -331,7 +331,7 @@ select:focus{outline:none;border-color:#8ECFC0}
         <input type="number" id="bm-priority" min="0" max="10" placeholder="5">
       </div>
       <div class="backlog-modal-actions">
-        <button type="submit" class="backlog-modal-save-btn">Save</button>
+        <button type="button" id="backlog-save-btn" class="backlog-modal-save-btn" onclick="submitBacklogForm()">Save</button>
         <button type="button" class="backlog-modal-cancel-btn" onclick="closeBacklogModal()">Cancel</button>
       </div>
     </form>
@@ -662,6 +662,59 @@ function closeBacklogModal() {
   overlay.style.display = 'none';
   const form = document.getElementById('backlog-modal-form');
   if (form) form.reset();
+}
+
+async function submitBacklogForm() {
+  const titleEl = document.getElementById('bm-title');
+  const title = titleEl.value.trim();
+  // Validation
+  let errEl = document.getElementById('bm-title-error');
+  if (!errEl) {
+    errEl = document.createElement('div');
+    errEl.id = 'bm-title-error';
+    errEl.className = 'backlog-card-error';
+    errEl.style.display = 'none';
+    titleEl.parentNode.insertBefore(errEl, titleEl.nextSibling);
+  }
+  if (!title) {
+    errEl.textContent = 'Title is required';
+    errEl.style.display = 'block';
+    titleEl.focus();
+    return;
+  }
+  errEl.style.display = 'none';
+  errEl.textContent = '';
+  const saveBtn = document.getElementById('backlog-save-btn');
+  if (saveBtn) saveBtn.disabled = true;
+  try {
+    const body = {
+      title,
+      description: document.getElementById('bm-description').value.trim() || null,
+      notes: document.getElementById('bm-notes').value.trim() || null,
+      tags: document.getElementById('bm-tags').value.trim() || null,
+      acceptanceCriteria: document.getElementById('bm-criteria').value.trim() || null,
+      priority: document.getElementById('bm-priority').value !== '' ? Number(document.getElementById('bm-priority').value) : null,
+    };
+    const r = await fetch(API + '/api/backlog', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (r.status === 201) {
+      closeBacklogModal();
+      await loadBacklog();
+      renderBoard(currentWf, runs);
+    } else {
+      const data = await r.json().catch(() => ({}));
+      errEl.textContent = (data && data.error) ? data.error : 'Failed to save entry';
+      errEl.style.display = 'block';
+    }
+  } catch (e) {
+    errEl.textContent = 'Network error — please try again';
+    errEl.style.display = 'block';
+  } finally {
+    if (saveBtn) saveBtn.disabled = false;
+  }
 }
 
 async function dispatchBacklogEntry(id, btn) {
