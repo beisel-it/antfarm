@@ -285,6 +285,12 @@ select:focus{outline:none;border-color:#8ECFC0}
 .project-badge.selected .project-badge-edit-btn,.project-badge.selected .project-badge-delete-btn{color:#fff}
 .project-badge-new-btn{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:12px;border:1px dashed var(--border);background:none;color:var(--text-secondary);font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;transition:border-color .15s,color .15s}
 .project-badge-new-btn:hover{border-color:var(--accent-green);color:var(--accent-green)}
+.project-badge-inline-confirm{display:none;align-items:center;gap:4px;background:var(--bg-surface-alt);border:1px solid var(--border);border-radius:4px;padding:2px 5px;margin-left:3px;z-index:1}
+.project-badge-inline-confirm.active{display:inline-flex}
+.project-badge-inline-confirm-delete{background:var(--accent-orange);border:none;border-radius:3px;padding:1px 7px;font-size:11px;color:#fff;cursor:pointer}
+.project-badge-inline-confirm-delete:hover{opacity:.85}
+.project-badge-inline-confirm-cancel{background:none;border:1px solid var(--border);border-radius:3px;padding:1px 7px;font-size:11px;color:var(--text-secondary);cursor:pointer}
+.project-badge-inline-confirm-cancel:hover{background:var(--bg-surface);color:var(--text-primary)}
 .board-wrapper{display:flex;flex-direction:column;min-height:calc(100vh - 57px)}
 
 /* ── Confirmation modal ────────────────────────────────────────── */
@@ -635,7 +641,11 @@ function renderProjectsBar() {
       <span class="project-badge-name">${esc(p.name)}</span>
       <span class="project-badge-actions">
         <button class="project-badge-edit-btn" onclick="event.stopPropagation();editProject('${esc(p.id)}')" title="Edit project">✎</button>
-        <button class="project-badge-delete-btn" onclick="event.stopPropagation();deleteProject('${esc(p.id)}', this)" title="Delete project">✕</button>
+        <button class="project-badge-delete-btn" onclick="deleteProjectBadge('${esc(p.id)}', event)" title="Delete project">✕</button>
+        <span class="project-badge-inline-confirm" id="badge-confirm-${esc(p.id)}">
+          <button class="project-badge-inline-confirm-delete" onclick="event.stopPropagation();confirmDeleteProjectBadge('${esc(p.id)}')">Delete</button>
+          <button class="project-badge-inline-confirm-cancel" onclick="event.stopPropagation();cancelDeleteProjectBadge('${esc(p.id)}')">Cancel</button>
+        </span>
       </span>
     </div>`;
   }).join('');
@@ -754,7 +764,7 @@ async function submitEditProjectForm() {
     await loadProjects();
     rerenderProjectsColumn();
   } catch (e) {
-    alert('Failed to update project: ' + e.message);
+    console.error('Failed to update project:', e);
   }
 }
 
@@ -777,6 +787,35 @@ async function confirmDeleteProject(id, card) {
 function cancelDeleteProject(card) {
   const inlineConfirm = card.querySelector('.project-inline-confirm');
   if (inlineConfirm) inlineConfirm.classList.remove('active');
+}
+
+function deleteProjectBadge(id, event) {
+  event.stopPropagation();
+  const confirm = document.getElementById('badge-confirm-' + id);
+  if (confirm) confirm.classList.add('active');
+}
+
+async function confirmDeleteProjectBadge(id) {
+  const confirm = document.getElementById('badge-confirm-' + id);
+  if (confirm) confirm.classList.remove('active');
+  try {
+    await fetch(API + '/api/projects/' + encodeURIComponent(id), { method: 'DELETE' });
+    if (selectedProjectIds.includes(id)) {
+      selectedProjectIds.splice(selectedProjectIds.indexOf(id), 1);
+      if (currentWf) {
+        loadRuns();
+      } else {
+        loadBacklog().then(() => renderBoard());
+      }
+    }
+    await loadProjects();
+    rerenderProjectsColumn();
+  } catch { /* ignore */ }
+}
+
+function cancelDeleteProjectBadge(id) {
+  const confirm = document.getElementById('badge-confirm-' + id);
+  if (confirm) confirm.classList.remove('active');
 }
 
 function rerenderProjectsColumn() {
