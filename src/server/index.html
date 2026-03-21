@@ -358,6 +358,16 @@ select:focus{outline:none;border-color:#8ECFC0}
     </form>
   </div>
 </div>
+<div id="confirm-modal-overlay" class="overlay" style="display:none" onclick="if(event.target===this)closeConfirmModal(false)">
+  <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
+    <div class="confirm-modal-title" id="confirm-modal-title"></div>
+    <div class="confirm-modal-body" id="confirm-modal-body"></div>
+    <div class="confirm-modal-actions">
+      <button class="confirm-btn-cancel" id="confirm-modal-cancel-btn" onclick="closeConfirmModal(false)">Cancel</button>
+      <button class="confirm-btn-danger" id="confirm-modal-confirm-btn" onclick="closeConfirmModal(true)">Confirm</button>
+    </div>
+  </div>
+</div>
 
 <script>
 const API = '';
@@ -1094,7 +1104,47 @@ function closePanel() {
   openRunId = null;
   document.getElementById('overlay').classList.remove('open');
 }
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closePanel(); });
+
+// ── Confirm modal helpers ─────────────────────────────────────────────────────
+let _confirmResolve = null;
+
+function showConfirmModal({ title = '', message = '', confirmLabel = 'Confirm', cancelLabel = 'Cancel' } = {}) {
+  return new Promise((resolve) => {
+    _confirmResolve = resolve;
+    const overlay = document.getElementById('confirm-modal-overlay');
+    document.getElementById('confirm-modal-title').textContent = title;
+    document.getElementById('confirm-modal-body').textContent = message;
+    document.getElementById('confirm-modal-confirm-btn').textContent = confirmLabel;
+    document.getElementById('confirm-modal-cancel-btn').textContent = cancelLabel;
+    overlay.style.display = 'flex';
+    overlay.classList.add('open');
+    // Focus the cancel button by default for safety
+    document.getElementById('confirm-modal-cancel-btn').focus();
+  });
+}
+
+function closeConfirmModal(result) {
+  const overlay = document.getElementById('confirm-modal-overlay');
+  overlay.classList.remove('open');
+  overlay.style.display = 'none';
+  if (_confirmResolve) {
+    const resolve = _confirmResolve;
+    _confirmResolve = null;
+    resolve(!!result);
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    const confirmOverlay = document.getElementById('confirm-modal-overlay');
+    if (confirmOverlay && confirmOverlay.classList.contains('open')) {
+      closeConfirmModal(false);
+    } else {
+      closePanel();
+    }
+  }
+});
 
 async function loadStories(runId) {
   const stories = await fetchJSON(`/api/runs/${runId}/stories`);
