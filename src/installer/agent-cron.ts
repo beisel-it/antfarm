@@ -149,6 +149,8 @@ Then call sessions_spawn with these parameters:
 - model: "${model}"
 - task: The full work prompt below, followed by "\\n\\nCLAIMED STEP JSON:\\n" and the exact JSON output from step claim.
 
+Immediately after calling sessions_spawn, check whether the session was spawned successfully. If sessions_spawn returns an error or does not return a session ID, retry the call up to three times before giving up.
+
 Full work prompt to include in the spawned task:
 ---START WORK PROMPT---
 ${workPrompt}
