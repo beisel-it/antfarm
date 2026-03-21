@@ -51,6 +51,7 @@ describe('submitBacklogForm() – US-007', () => {
     assert.ok(body.includes('tags'), 'should include tags');
     assert.ok(body.includes('acceptanceCriteria'), 'should include acceptanceCriteria');
     assert.ok(body.includes('priority'), 'should include priority');
+    assert.ok(body.includes('projectId'), 'should include projectId for POST');
   });
 
   it('submitBacklogForm disables save button while in flight', () => {

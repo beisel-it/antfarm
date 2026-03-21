@@ -145,6 +145,7 @@ select:focus{outline:none;border-color:#8ECFC0}
 .card.failed,.card.error{border-left:3px solid var(--accent-orange)}
 .card-cancel-btn{background:none;border:1px solid var(--accent-orange);border-radius:4px;color:var(--accent-orange);cursor:pointer;font-size:10px;font-weight:600;padding:2px 6px;line-height:1.4;flex-shrink:0;transition:background .15s,color .15s}
 .card-cancel-btn:hover{background:var(--accent-orange);color:#fff}
+.run-card-error{display:none;color:var(--status-failed,#e05);font-size:11px;margin-top:4px}
 
 /* ── Overlay / Panel ───────────────────────────────────────────── */
 .overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:var(--overlay);z-index:100;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .15s}
@@ -264,8 +265,8 @@ select:focus{outline:none;border-color:#8ECFC0}
 .backlog-add-btn:hover{opacity:.85}
 .backlog-modal-field{display:flex;flex-direction:column;gap:4px;margin-bottom:14px}
 .backlog-modal-field label{font-size:12px;font-weight:500;color:var(--text-secondary);margin-bottom:4px}
-.backlog-modal-field input,.backlog-modal-field textarea{background:var(--bg-surface);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:12px;padding:5px 8px;width:100%;font-family:inherit;resize:vertical;outline:none;transition:border-color .15s;box-sizing:border-box}
-.backlog-modal-field input:focus,.backlog-modal-field textarea:focus{border-color:var(--accent-teal)}
+.backlog-modal-field input,.backlog-modal-field textarea,.backlog-modal-field select{background:var(--bg-surface);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:12px;padding:5px 8px;width:100%;font-family:inherit;resize:vertical;outline:none;transition:border-color .15s;box-sizing:border-box}
+.backlog-modal-field input:focus,.backlog-modal-field textarea:focus,.backlog-modal-field select:focus{border-color:var(--accent-teal)}
 .backlog-modal-actions{display:flex;flex-direction:row;justify-content:flex-end;gap:8px;margin-top:4px}
 .backlog-modal-save-btn{background:var(--accent-green);color:#fff;border:none;border-radius:4px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer;transition:opacity .15s}
 .backlog-modal-save-btn:hover{opacity:.85}
@@ -273,6 +274,34 @@ select:focus{outline:none;border-color:#8ECFC0}
 .project-form-cancel{background:none;border:1px solid var(--border);border-radius:4px;padding:3px 10px;font-size:11px;color:var(--text-secondary);cursor:pointer}
 .project-add-btn{display:block;background:none;border:1px dashed var(--border);border-radius:4px;color:var(--text-secondary);cursor:pointer;font-size:11px;padding:5px;margin:4px 8px 8px;width:calc(100% - 16px);text-align:center;transition:border-color .15s,color .15s}
 .project-add-btn:hover{border-color:var(--accent-green);color:var(--accent-green)}
+
+/* ── Confirmation modal ────────────────────────────────────────── */
+.confirm-modal-backdrop{position:fixed;inset:0;background:var(--overlay);z-index:200;display:flex;align-items:center;justify-content:center}
+.confirm-modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--bg-surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 32px var(--shadow-heavy);z-index:201;padding:20px 24px;min-width:280px;max-width:440px;width:100%}
+.confirm-modal-title{font-size:15px;font-weight:600;color:var(--text-primary);margin-bottom:8px}
+.confirm-modal-body{font-size:13px;color:var(--text-secondary);margin-bottom:16px;line-height:1.5}
+.confirm-modal-actions{display:flex;gap:8px;justify-content:flex-end}
+.confirm-btn-danger{background:var(--accent-orange);color:#fff;border:none;border-radius:4px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer;transition:opacity .15s}
+.confirm-btn-danger:hover{opacity:.85}
+.confirm-btn-cancel{background:none;border:1px solid var(--border);border-radius:4px;padding:5px 14px;font-size:12px;color:var(--text-secondary);cursor:pointer;transition:background .15s,color .15s}
+.confirm-btn-cancel:hover{background:var(--bg-surface-alt);color:var(--text-primary)}
+
+/* ── Inline confirm (expand on trigger) ───────────────────────── */
+.inline-confirm{display:inline-flex;align-items:center;gap:4px;overflow:hidden}
+.inline-confirm-actions{display:inline-flex;align-items:center;gap:4px;max-width:0;overflow:hidden;transition:max-width .2s ease,opacity .2s ease;opacity:0}
+.inline-confirm.active .inline-confirm-actions{max-width:200px;opacity:1}
+.project-inline-confirm{display:none;align-items:center;gap:4px;position:absolute;top:4px;right:30px;background:var(--bg-surface-alt);border:1px solid var(--border);border-radius:4px;padding:3px 6px;z-index:1}
+.project-inline-confirm.active{display:inline-flex}
+.project-inline-confirm-delete{background:var(--accent-orange);border:none;border-radius:3px;padding:2px 8px;font-size:11px;color:#fff;cursor:pointer}
+.project-inline-confirm-delete:hover{opacity:.85}
+.project-inline-confirm-cancel{background:none;border:1px solid var(--border);border-radius:3px;padding:2px 8px;font-size:11px;color:var(--text-secondary);cursor:pointer}
+.project-inline-confirm-cancel:hover{background:var(--bg-surface);color:var(--text-primary)}
+.backlog-inline-confirm{display:none;align-items:center;gap:4px;position:absolute;top:4px;right:30px;background:var(--bg-surface-alt);border:1px solid var(--border);border-radius:4px;padding:3px 6px;z-index:1}
+.backlog-inline-confirm.active{display:inline-flex}
+.backlog-inline-confirm-delete{background:var(--accent-orange);border:none;border-radius:3px;padding:2px 8px;font-size:11px;color:#fff;cursor:pointer}
+.backlog-inline-confirm-delete:hover{opacity:.85}
+.backlog-inline-confirm-cancel{background:none;border:1px solid var(--border);border-radius:3px;padding:2px 8px;font-size:11px;color:var(--text-secondary);cursor:pointer}
+.backlog-inline-confirm-cancel:hover{background:var(--bg-surface);color:var(--text-primary)}
 </style>
 </head>
 <body>
@@ -329,11 +358,33 @@ select:focus{outline:none;border-color:#8ECFC0}
         <label for="bm-priority">Priority (0–10)</label>
         <input type="number" id="bm-priority" min="0" max="10" placeholder="5">
       </div>
+      <div class="backlog-modal-field">
+        <label for="bm-workflow-id">Workflow <span style="color:var(--accent-orange)">*</span></label>
+        <select id="bm-workflow-id">
+          <option value="">— No workflow —</option>
+        </select>
+      </div>
+      <div class="backlog-modal-field">
+        <label for="bm-project-id">Project</label>
+        <select id="bm-project-id">
+          <option value="">— No project —</option>
+        </select>
+      </div>
       <div class="backlog-modal-actions">
         <button type="button" id="backlog-save-btn" class="backlog-modal-save-btn" onclick="submitBacklogForm()">Save</button>
         <button type="button" class="backlog-modal-cancel-btn" onclick="closeBacklogModal()">Cancel</button>
       </div>
     </form>
+  </div>
+</div>
+<div id="confirm-modal-overlay" class="overlay" style="display:none" onclick="if(event.target===this)closeConfirmModal(false)">
+  <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
+    <div class="confirm-modal-title" id="confirm-modal-title"></div>
+    <div class="confirm-modal-body" id="confirm-modal-body"></div>
+    <div class="confirm-modal-actions">
+      <button class="confirm-btn-cancel" id="confirm-modal-cancel-btn" onclick="closeConfirmModal(false)">Cancel</button>
+      <button class="confirm-btn-danger" id="confirm-modal-confirm-btn" onclick="closeConfirmModal(true)">Confirm</button>
+    </div>
   </div>
 </div>
 
@@ -456,8 +507,12 @@ function renderProjectsColumn() {
         const urlLine = p.github_repo_url
           ? `<div><a class="project-card-link" href="${esc(p.github_repo_url)}" target="_blank" rel="noopener">${esc(p.github_repo_url)}</a></div>`
           : '';
-        return `<div class="project-card">
-          <button class="project-delete-btn" onclick="deleteProject('${esc(p.id)}')" title="Delete project">✕</button>
+        return `<div class="project-card" data-project-id="${esc(p.id)}">
+          <button class="project-delete-btn" onclick="deleteProject('${esc(p.id)}', this)" title="Delete project">✕</button>
+          <div class="project-inline-confirm">
+            <button class="project-inline-confirm-delete" onclick="confirmDeleteProject('${esc(p.id)}', this.closest('.project-card'))">Delete</button>
+            <button class="project-inline-confirm-cancel" onclick="cancelDeleteProject(this.closest('.project-card'))">Cancel</button>
+          </div>
           <div class="project-card-name" title="${esc(p.name)}">${esc(p.name)}</div>
           <div class="project-card-meta">${pathLine}${urlLine}</div>
           <details class="project-detail" data-project-id="${esc(p.id)}" ontoggle="loadProjectDetail(this)">
@@ -528,13 +583,25 @@ async function submitAddProject() {
   } catch { /* ignore */ }
 }
 
-async function deleteProject(id) {
-  if (!confirm('Delete this project?')) return;
+function deleteProject(id, btn) {
+  const card = btn.closest('.project-card');
+  const inlineConfirm = card.querySelector('.project-inline-confirm');
+  if (inlineConfirm) inlineConfirm.classList.add('active');
+}
+
+async function confirmDeleteProject(id, card) {
+  const inlineConfirm = card.querySelector('.project-inline-confirm');
+  if (inlineConfirm) inlineConfirm.classList.remove('active');
   try {
     await fetch(API + '/api/projects/' + encodeURIComponent(id), { method: 'DELETE' });
     await loadProjects();
     rerenderProjectsColumn();
   } catch { /* ignore */ }
+}
+
+function cancelDeleteProject(card) {
+  const inlineConfirm = card.querySelector('.project-inline-confirm');
+  if (inlineConfirm) inlineConfirm.classList.remove('active');
 }
 
 function rerenderProjectsColumn() {
@@ -627,6 +694,10 @@ function renderBacklogColumn() {
             <button class="${dispatchClass}" onclick="event.stopPropagation();dispatchBacklogEntry('${entry.id}',this)" ${dispatchDisabled} ${dispatchTitle}>${btnLabel}</button>
             <button class="backlog-delete-btn" onclick="event.stopPropagation();deleteBacklogEntry('${entry.id}',this)" title="Delete">✕</button>
           </div>
+          <div class="backlog-inline-confirm">
+            <button class="backlog-inline-confirm-delete" onclick="event.stopPropagation();confirmDeleteBacklog('${entry.id}', this.closest('.backlog-card'))">Delete</button>
+            <button class="backlog-inline-confirm-cancel" onclick="event.stopPropagation();cancelDeleteBacklog(this.closest('.backlog-card'))">Cancel</button>
+          </div>
         </div>`;
       }).join('');
   return `<div class="column" id="backlog-column">
@@ -636,6 +707,20 @@ function renderBacklogColumn() {
     </div>
     <div class="cards">${cardHTML}</div>
   </div>`;
+}
+
+function populateWorkflowSelect(selectedId) {
+  const sel = document.getElementById('bm-workflow-id');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— No workflow —</option>' +
+    workflows.map(w => `<option value="${esc(w.id)}"${w.id === selectedId ? ' selected' : ''}>${esc(w.name)}</option>`).join('');
+}
+
+function populateProjectSelect(selectedId) {
+  const sel = document.getElementById('bm-project-id');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— No project —</option>' +
+    projects.map(p => `<option value="${esc(p.id)}"${p.id === selectedId ? ' selected' : ''}>${esc(p.name)}</option>`).join('');
 }
 
 function openBacklogForm() {
@@ -648,6 +733,8 @@ function openBacklogForm() {
   document.getElementById('bm-notes').value = '';
   document.getElementById('bm-tags').value = '';
   document.getElementById('bm-priority').value = '';
+  populateWorkflowSelect(currentWf ? currentWf.id : null);
+  populateProjectSelect(null);
   heading.textContent = 'New Backlog Entry';
   overlay.style.display = 'flex';
   overlay.classList.add('open');
@@ -666,6 +753,8 @@ function openBacklogEntryEdit(id) {
   document.getElementById('bm-notes').value = entry.notes || '';
   document.getElementById('bm-tags').value = entry.tags || '';
   document.getElementById('bm-priority').value = entry.priority != null ? String(entry.priority) : '';
+  populateWorkflowSelect(entry.workflow_id || null);
+  populateProjectSelect(entry.project_id || null);
   heading.textContent = 'Edit Backlog Entry';
   overlay.style.display = 'flex';
   overlay.classList.add('open');
@@ -705,6 +794,8 @@ async function submitBacklogForm() {
   if (saveBtn) saveBtn.disabled = true;
   try {
     const priorityRaw = document.getElementById('bm-priority').value;
+    const projectIdVal = document.getElementById('bm-project-id').value || null;
+    const workflowIdVal = document.getElementById('bm-workflow-id').value || null;
     if (editingBacklogId) {
       // PATCH (edit mode) — snake_case fields
       const body = {
@@ -714,6 +805,8 @@ async function submitBacklogForm() {
         tags: document.getElementById('bm-tags').value.trim() || null,
         acceptance_criteria: document.getElementById('bm-criteria').value.trim() || null,
         priority: priorityRaw !== '' ? Number(priorityRaw) : null,
+        project_id: projectIdVal,
+        workflow_id: workflowIdVal,
       };
       const r = await fetch(API + `/api/backlog/${editingBacklogId}`, {
         method: 'PATCH',
@@ -738,6 +831,8 @@ async function submitBacklogForm() {
         tags: document.getElementById('bm-tags').value.trim() || null,
         acceptanceCriteria: document.getElementById('bm-criteria').value.trim() || null,
         priority: priorityRaw !== '' ? Number(priorityRaw) : null,
+        projectId: projectIdVal,
+        workflowId: workflowIdVal,
       };
       const r = await fetch(API + '/api/backlog', {
         method: 'POST',
@@ -765,7 +860,7 @@ async function submitBacklogForm() {
 async function dispatchBacklogEntry(id, btn) {
   const card = btn.closest('[data-backlog-id]');
   const title = card ? (card.getAttribute('data-backlog-title') || id) : id;
-  if (!confirm(`Dispatch "${title}" to the agent?`)) return;
+  const ok = await showConfirmModal({ title: 'Dispatch entry', message: `Dispatch "${title}" to the agent?`, confirmLabel: 'Dispatch', cancelLabel: 'Cancel' }); if (!ok) return;
   const errEl = card ? card.querySelector('.backlog-card-error') : null;
   if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
   btn.disabled = true;
@@ -822,31 +917,46 @@ async function retryStory(runId, storyId) {
 
 async function cancelRun(id, event) {
   event.stopPropagation();
-  if (!confirm('Cancel this run?')) return;
+  const ok = await showConfirmModal({ title: 'Cancel run', message: 'Cancel this run? This cannot be undone.', confirmLabel: 'Yes, cancel', cancelLabel: 'Keep running' });
+  if (!ok) return;
+  const card = document.querySelector(`[data-run-id="${id}"]`);
+  const errEl = card ? card.querySelector('.run-card-error') : null;
+  if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
   try {
     const r = await fetch(API + `/api/runs/${id}/cancel`, { method: 'POST' });
     const data = await r.json();
     if (r.ok && data.ok) {
       await loadRuns();
     } else {
-      alert('Cancel failed: ' + (data.error || 'unknown error'));
+      if (errEl) { errEl.textContent = 'Cancel failed: ' + (data.error || 'unknown error'); errEl.style.display = 'block'; }
     }
   } catch (e) {
-    alert('Cancel failed: ' + (e instanceof Error ? e.message : String(e)));
+    if (errEl) { errEl.textContent = 'Cancel failed: ' + (e instanceof Error ? e.message : String(e)); errEl.style.display = 'block'; }
   }
 }
 
-async function deleteBacklogEntry(id, btn) {
-  if (!confirm('Delete this backlog item?')) return;
+function deleteBacklogEntry(id, btn) {
+  const card = btn.closest('.backlog-card');
+  const inlineConfirm = card && card.querySelector('.backlog-inline-confirm');
+  if (inlineConfirm) inlineConfirm.classList.add('active');
+}
+
+async function confirmDeleteBacklog(id, card) {
+  const inlineConfirm = card && card.querySelector('.backlog-inline-confirm');
+  if (inlineConfirm) inlineConfirm.classList.remove('active');
   try {
     const r = await fetch(API + '/api/backlog/' + id, { method: 'DELETE' });
     const data = await r.json();
     if (r.ok && data.ok) {
-      const card = btn.closest('[data-backlog-id]');
       if (card) card.remove();
       await loadBacklog();
     }
   } catch { /* ignore */ }
+}
+
+function cancelDeleteBacklog(card) {
+  const inlineConfirm = card && card.querySelector('.backlog-inline-confirm');
+  if (inlineConfirm) inlineConfirm.classList.remove('active');
 }
 
 function renderBoard(wf, runs) {
@@ -876,8 +986,9 @@ function renderBoard(wf, runs) {
           const time = run.updated_at ? parseTS(run.updated_at)?.toLocaleString() || "" : '';
           const title = run.task.length > 60 ? run.task.slice(0, 57) + '…' : run.task;
           const cancelBtn = isRunning ? `<button class="card-cancel-btn" onclick="cancelRun('${run.id}',event)" title="Cancel this run">Cancel</button>` : '';
-          return `<div class="card ${cls}" onclick="openRun('${run.id}')">
+          return `<div class="card ${cls}" data-run-id="${run.id}" onclick="openRun('${run.id}')">
             <div class="card-title" title="${run.task.replace(/"/g, '&quot;')}">${title}</div>
+            <div class="run-card-error"></div>
             <div class="card-meta">
               <span class="badge ${badge}">${run.status}</span>
               <span>${time}</span>
@@ -1060,7 +1171,47 @@ function closePanel() {
   openRunId = null;
   document.getElementById('overlay').classList.remove('open');
 }
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closePanel(); });
+
+// ── Confirm modal helpers ─────────────────────────────────────────────────────
+let _confirmResolve = null;
+
+function showConfirmModal({ title = '', message = '', confirmLabel = 'Confirm', cancelLabel = 'Cancel' } = {}) {
+  return new Promise((resolve) => {
+    _confirmResolve = resolve;
+    const overlay = document.getElementById('confirm-modal-overlay');
+    document.getElementById('confirm-modal-title').textContent = title;
+    document.getElementById('confirm-modal-body').textContent = message;
+    document.getElementById('confirm-modal-confirm-btn').textContent = confirmLabel;
+    document.getElementById('confirm-modal-cancel-btn').textContent = cancelLabel;
+    overlay.style.display = 'flex';
+    overlay.classList.add('open');
+    // Focus the cancel button by default for safety
+    document.getElementById('confirm-modal-cancel-btn').focus();
+  });
+}
+
+function closeConfirmModal(result) {
+  const overlay = document.getElementById('confirm-modal-overlay');
+  overlay.classList.remove('open');
+  overlay.style.display = 'none';
+  if (_confirmResolve) {
+    const resolve = _confirmResolve;
+    _confirmResolve = null;
+    resolve(!!result);
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    const confirmOverlay = document.getElementById('confirm-modal-overlay');
+    if (confirmOverlay && confirmOverlay.classList.contains('open')) {
+      closeConfirmModal(false);
+    } else {
+      closePanel();
+    }
+  }
+});
 
 async function loadStories(runId) {
   const stories = await fetchJSON(`/api/runs/${runId}/stories`);
