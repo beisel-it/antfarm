@@ -264,8 +264,8 @@ select:focus{outline:none;border-color:#8ECFC0}
 .backlog-add-btn:hover{opacity:.85}
 .backlog-modal-field{display:flex;flex-direction:column;gap:4px;margin-bottom:14px}
 .backlog-modal-field label{font-size:12px;font-weight:500;color:var(--text-secondary);margin-bottom:4px}
-.backlog-modal-field input,.backlog-modal-field textarea{background:var(--bg-surface);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:12px;padding:5px 8px;width:100%;font-family:inherit;resize:vertical;outline:none;transition:border-color .15s;box-sizing:border-box}
-.backlog-modal-field input:focus,.backlog-modal-field textarea:focus{border-color:var(--accent-teal)}
+.backlog-modal-field input,.backlog-modal-field textarea,.backlog-modal-field select{background:var(--bg-surface);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:12px;padding:5px 8px;width:100%;font-family:inherit;resize:vertical;outline:none;transition:border-color .15s;box-sizing:border-box}
+.backlog-modal-field input:focus,.backlog-modal-field textarea:focus,.backlog-modal-field select:focus{border-color:var(--accent-teal)}
 .backlog-modal-actions{display:flex;flex-direction:row;justify-content:flex-end;gap:8px;margin-top:4px}
 .backlog-modal-save-btn{background:var(--accent-green);color:#fff;border:none;border-radius:4px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer;transition:opacity .15s}
 .backlog-modal-save-btn:hover{opacity:.85}
@@ -328,6 +328,12 @@ select:focus{outline:none;border-color:#8ECFC0}
       <div class="backlog-modal-field">
         <label for="bm-priority">Priority (0–10)</label>
         <input type="number" id="bm-priority" min="0" max="10" placeholder="5">
+      </div>
+      <div class="backlog-modal-field">
+        <label for="bm-project-id">Project</label>
+        <select id="bm-project-id">
+          <option value="">— No project —</option>
+        </select>
       </div>
       <div class="backlog-modal-actions">
         <button type="button" id="backlog-save-btn" class="backlog-modal-save-btn" onclick="submitBacklogForm()">Save</button>
@@ -638,6 +644,13 @@ function renderBacklogColumn() {
   </div>`;
 }
 
+function populateProjectSelect(selectedId) {
+  const sel = document.getElementById('bm-project-id');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— No project —</option>' +
+    projects.map(p => `<option value="${esc(p.id)}"${p.id === selectedId ? ' selected' : ''}>${esc(p.name)}</option>`).join('');
+}
+
 function openBacklogForm() {
   editingBacklogId = null;
   const overlay = document.getElementById('backlog-modal-overlay');
@@ -648,6 +661,7 @@ function openBacklogForm() {
   document.getElementById('bm-notes').value = '';
   document.getElementById('bm-tags').value = '';
   document.getElementById('bm-priority').value = '';
+  populateProjectSelect(null);
   heading.textContent = 'New Backlog Entry';
   overlay.style.display = 'flex';
   overlay.classList.add('open');
@@ -666,6 +680,7 @@ function openBacklogEntryEdit(id) {
   document.getElementById('bm-notes').value = entry.notes || '';
   document.getElementById('bm-tags').value = entry.tags || '';
   document.getElementById('bm-priority').value = entry.priority != null ? String(entry.priority) : '';
+  populateProjectSelect(entry.project_id || null);
   heading.textContent = 'Edit Backlog Entry';
   overlay.style.display = 'flex';
   overlay.classList.add('open');
@@ -705,6 +720,7 @@ async function submitBacklogForm() {
   if (saveBtn) saveBtn.disabled = true;
   try {
     const priorityRaw = document.getElementById('bm-priority').value;
+    const projectIdVal = document.getElementById('bm-project-id').value || null;
     if (editingBacklogId) {
       // PATCH (edit mode) — snake_case fields
       const body = {
@@ -714,6 +730,7 @@ async function submitBacklogForm() {
         tags: document.getElementById('bm-tags').value.trim() || null,
         acceptance_criteria: document.getElementById('bm-criteria').value.trim() || null,
         priority: priorityRaw !== '' ? Number(priorityRaw) : null,
+        project_id: projectIdVal,
       };
       const r = await fetch(API + `/api/backlog/${editingBacklogId}`, {
         method: 'PATCH',
@@ -738,6 +755,7 @@ async function submitBacklogForm() {
         tags: document.getElementById('bm-tags').value.trim() || null,
         acceptanceCriteria: document.getElementById('bm-criteria').value.trim() || null,
         priority: priorityRaw !== '' ? Number(priorityRaw) : null,
+        projectId: projectIdVal,
       };
       const r = await fetch(API + '/api/backlog', {
         method: 'POST',

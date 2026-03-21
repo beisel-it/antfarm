@@ -84,4 +84,20 @@ describe('Backlog modal HTML structure', () => {
     assert.ok(html.includes('type="number"') && html.includes('id="bm-priority"'),
       'bm-priority should be type number');
   });
+
+  it('contains select id bm-project-id', () => {
+    assert.ok(html.includes('id="bm-project-id"'), 'Missing id="bm-project-id" select');
+  });
+
+  it('bm-project-id has a default "No project" option', () => {
+    assert.ok(html.includes('— No project —'), 'Missing default "No project" option');
+  });
+
+  it('populateProjectSelect function exists', () => {
+    assert.ok(html.includes('function populateProjectSelect('), 'Missing populateProjectSelect function');
+  });
+
+  it('modal CSS includes select in field styling', () => {
+    assert.ok(html.includes('.backlog-modal-field select'), 'select must be styled within .backlog-modal-field');
+  });
 });

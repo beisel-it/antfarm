@@ -61,7 +61,7 @@ describe('US-008: openBacklogEntryEdit()', () => {
 
   it('openBacklogEntryEdit sets modal heading to "Edit Backlog Entry"', () => {
     const fnStart = html.indexOf('function openBacklogEntryEdit(');
-    const fnBody = html.slice(fnStart, fnStart + 800);
+    const fnBody = html.slice(fnStart, fnStart + 1200);
     assert.ok(fnBody.includes("'Edit Backlog Entry'") || fnBody.includes('"Edit Backlog Entry"'),
       'must set heading to "Edit Backlog Entry"');
   });
@@ -85,6 +85,25 @@ describe('US-008: openBacklogEntryEdit()', () => {
   it('delete button uses event.stopPropagation()', () => {
     assert.ok(html.includes('event.stopPropagation();deleteBacklogEntry('), 
       'delete button must stop propagation to prevent card click');
+  });
+
+  it('openBacklogEntryEdit pre-fills project_id field', () => {
+    const fnStart = html.indexOf('function openBacklogEntryEdit(');
+    const fnBody = html.slice(fnStart, fnStart + 1100);
+    assert.ok(fnBody.includes("'bm-project-id'") || fnBody.includes('"bm-project-id"') || fnBody.includes('populateProjectSelect'),
+      'must populate project select from entry.project_id');
+    assert.ok(fnBody.includes('entry.project_id') || fnBody.includes('populateProjectSelect'),
+      'must use entry.project_id value');
+  });
+
+  it('submitBacklogForm PATCH includes project_id', () => {
+    const fnStart = html.indexOf('async function submitBacklogForm()');
+    assert.ok(fnStart !== -1, 'submitBacklogForm must exist');
+    const fnBody = html.slice(fnStart, fnStart + 4000);
+    const patchIdx = fnBody.indexOf("method: 'PATCH'");
+    assert.ok(patchIdx !== -1, 'must have PATCH block');
+    const patchBlock = fnBody.slice(0, patchIdx + 200);
+    assert.ok(patchBlock.includes('project_id'), 'PATCH body must include project_id');
   });
 
   it('submitBacklogForm handles PATCH when editingBacklogId is set', () => {

@@ -44,7 +44,7 @@ describe('US-010: Backlog modal visual alignment with run detail panel', () => {
 
   it('form inputs have focus style using var(--accent-teal) border', () => {
     assert.ok(
-      html.includes('.backlog-modal-field input:focus,.backlog-modal-field textarea:focus{border-color:var(--accent-teal)}'),
+      html.includes('backlog-modal-field input:focus') && html.includes('backlog-modal-field textarea:focus') && html.includes('border-color:var(--accent-teal)'),
       'Focus style must use var(--accent-teal)'
     );
   });
