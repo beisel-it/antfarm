@@ -145,6 +145,7 @@ select:focus{outline:none;border-color:#8ECFC0}
 .card.failed,.card.error{border-left:3px solid var(--accent-orange)}
 .card-cancel-btn{background:none;border:1px solid var(--accent-orange);border-radius:4px;color:var(--accent-orange);cursor:pointer;font-size:10px;font-weight:600;padding:2px 6px;line-height:1.4;flex-shrink:0;transition:background .15s,color .15s}
 .card-cancel-btn:hover{background:var(--accent-orange);color:#fff}
+.run-card-error{display:none;color:var(--status-failed,#e05);font-size:11px;margin-top:4px}
 
 /* ── Overlay / Panel ───────────────────────────────────────────── */
 .overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:var(--overlay);z-index:100;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .15s}
@@ -866,17 +867,21 @@ async function retryStory(runId, storyId) {
 
 async function cancelRun(id, event) {
   event.stopPropagation();
-  if (!confirm('Cancel this run?')) return;
+  const ok = await showConfirmModal({ title: 'Cancel run', message: 'Cancel this run? This cannot be undone.', confirmLabel: 'Yes, cancel', cancelLabel: 'Keep running' });
+  if (!ok) return;
+  const card = document.querySelector(`[data-run-id="${id}"]`);
+  const errEl = card ? card.querySelector('.run-card-error') : null;
+  if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
   try {
     const r = await fetch(API + `/api/runs/${id}/cancel`, { method: 'POST' });
     const data = await r.json();
     if (r.ok && data.ok) {
       await loadRuns();
     } else {
-      alert('Cancel failed: ' + (data.error || 'unknown error'));
+      if (errEl) { errEl.textContent = 'Cancel failed: ' + (data.error || 'unknown error'); errEl.style.display = 'block'; }
     }
   } catch (e) {
-    alert('Cancel failed: ' + (e instanceof Error ? e.message : String(e)));
+    if (errEl) { errEl.textContent = 'Cancel failed: ' + (e instanceof Error ? e.message : String(e)); errEl.style.display = 'block'; }
   }
 }
 
@@ -920,8 +925,9 @@ function renderBoard(wf, runs) {
           const time = run.updated_at ? parseTS(run.updated_at)?.toLocaleString() || "" : '';
           const title = run.task.length > 60 ? run.task.slice(0, 57) + '…' : run.task;
           const cancelBtn = isRunning ? `<button class="card-cancel-btn" onclick="cancelRun('${run.id}',event)" title="Cancel this run">Cancel</button>` : '';
-          return `<div class="card ${cls}" onclick="openRun('${run.id}')">
+          return `<div class="card ${cls}" data-run-id="${run.id}" onclick="openRun('${run.id}')">
             <div class="card-title" title="${run.task.replace(/"/g, '&quot;')}">${title}</div>
+            <div class="run-card-error"></div>
             <div class="card-meta">
               <span class="badge ${badge}">${run.status}</span>
               <span>${time}</span>
