@@ -114,3 +114,93 @@ describe("US-001: Status bar HTML element and base CSS", () => {
     );
   });
 });
+
+describe("US-002: Move Medic badge into the status bar", () => {
+  const html = fs.readFileSync(htmlPath, "utf8");
+  const distHtml = fs.readFileSync(distHtmlPath, "utf8");
+
+  it("medic-badge is a direct child of #status-bar, not inside <header>", () => {
+    const statusBarIdx = html.indexOf('<footer id="status-bar">');
+    const medicBadgeIdx = html.indexOf('id="medic-badge"');
+    assert.ok(statusBarIdx !== -1, "footer#status-bar should exist");
+    assert.ok(medicBadgeIdx !== -1, "medic-badge should exist");
+    // medic-badge should appear AFTER status-bar opening tag
+    assert.ok(
+      medicBadgeIdx > statusBarIdx,
+      "medic-badge should appear after <footer id=\"status-bar\">"
+    );
+    // medic-badge should appear BEFORE the </footer> tag
+    const footerCloseIdx = html.indexOf("</footer>", statusBarIdx);
+    assert.ok(
+      medicBadgeIdx < footerCloseIdx,
+      "medic-badge should be inside the #status-bar footer element"
+    );
+  });
+
+  it("medic-badge is NOT inside <header>", () => {
+    const headerStart = html.indexOf("<header");
+    const headerEnd = html.indexOf("</header>");
+    const medicBadgeIdx = html.indexOf('id="medic-badge"');
+    assert.ok(headerStart !== -1, "header should exist");
+    assert.ok(headerEnd !== -1, "header closing tag should exist");
+    assert.ok(medicBadgeIdx !== -1, "medic-badge should exist");
+    const isInsideHeader = medicBadgeIdx > headerStart && medicBadgeIdx < headerEnd;
+    assert.ok(!isInsideHeader, "medic-badge should NOT be inside <header>");
+  });
+
+  it("medic-panel CSS has bottom:40px (opens upward from status bar)", () => {
+    const ruleIdx = html.indexOf(".medic-panel{");
+    assert.ok(ruleIdx !== -1, ".medic-panel CSS rule should exist");
+    const rule = html.slice(ruleIdx, ruleIdx + 400);
+    assert.ok(
+      rule.includes("bottom:40px"),
+      "Expected bottom:40px in .medic-panel rule"
+    );
+  });
+
+  it("medic-panel CSS does NOT have top:60px", () => {
+    const ruleIdx = html.indexOf(".medic-panel{");
+    assert.ok(ruleIdx !== -1, ".medic-panel CSS rule should exist");
+    const rule = html.slice(ruleIdx, ruleIdx + 400);
+    assert.ok(
+      !rule.includes("top:60px"),
+      "Expected top:60px to be removed from .medic-panel rule"
+    );
+  });
+
+  it("medic-panel CSS has right:16px", () => {
+    const ruleIdx = html.indexOf(".medic-panel{");
+    assert.ok(ruleIdx !== -1, ".medic-panel CSS rule should exist");
+    const rule = html.slice(ruleIdx, ruleIdx + 400);
+    assert.ok(
+      rule.includes("right:16px"),
+      "Expected right:16px in .medic-panel rule"
+    );
+  });
+
+  it("medic-badge still calls toggleMedicPanel() on click", () => {
+    assert.ok(
+      html.includes('onclick="toggleMedicPanel()"'),
+      "medic-badge should still call toggleMedicPanel() on click"
+    );
+  });
+
+  it("dist: medic-badge is inside footer#status-bar", () => {
+    const statusBarIdx = distHtml.indexOf('<footer id="status-bar">');
+    const medicBadgeIdx = distHtml.indexOf('id="medic-badge"');
+    const footerCloseIdx = distHtml.indexOf("</footer>", statusBarIdx);
+    assert.ok(statusBarIdx !== -1, "footer#status-bar should exist in dist");
+    assert.ok(medicBadgeIdx !== -1, "medic-badge should exist in dist");
+    assert.ok(
+      medicBadgeIdx > statusBarIdx && medicBadgeIdx < footerCloseIdx,
+      "medic-badge should be inside footer#status-bar in dist"
+    );
+  });
+
+  it("dist: medic-panel CSS has bottom:40px", () => {
+    const ruleIdx = distHtml.indexOf(".medic-panel{");
+    assert.ok(ruleIdx !== -1, ".medic-panel CSS rule should exist in dist");
+    const rule = distHtml.slice(ruleIdx, ruleIdx + 400);
+    assert.ok(rule.includes("bottom:40px"), "Expected bottom:40px in dist .medic-panel rule");
+  });
+});

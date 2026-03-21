@@ -227,7 +227,7 @@ select:focus{outline:none;border-color:#8ECFC0}
 .medic-dot.unknown{background:#9ca3af}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
 
-.medic-panel{position:fixed;top:60px;right:16px;width:340px;max-height:500px;background:var(--bg-surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 32px var(--shadow-heavy);z-index:50;overflow:hidden;display:none;flex-direction:column}
+.medic-panel{position:fixed;bottom:40px;right:16px;width:340px;max-height:500px;background:var(--bg-surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 32px var(--shadow-heavy);z-index:50;overflow:hidden;display:none;flex-direction:column}
 .medic-panel.open{display:flex}
 .medic-panel-header{padding:14px 16px;border-bottom:1px solid var(--border-light);font-size:14px;font-weight:600;color:var(--text-primary);display:flex;align-items:center;gap:8px}
 .medic-panel-body{padding:12px 16px;overflow-y:auto;flex:1}
@@ -318,10 +318,6 @@ select:focus{outline:none;border-color:#8ECFC0}
     <button class="status-filter-btn" data-status="cancelled">cancelled</button>
   </div>
   <button class="theme-toggle" id="theme-toggle" title="Toggle light/dark mode" aria-label="Toggle light/dark mode">☀️</button>
-  <div class="medic-badge" id="medic-badge" onclick="toggleMedicPanel()" title="Medic watchdog status">
-    <span class="medic-dot unknown" id="medic-dot"></span>
-    <span id="medic-label">Medic</span>
-  </div>
   <span class="refresh-note" id="refresh-note">Auto-refresh: 30s</span>
 </header>
 <div class="board" id="board"><div class="empty" style="margin:auto">Select a workflow</div></div>
@@ -391,7 +387,12 @@ select:focus{outline:none;border-color:#8ECFC0}
   </div>
 </div>
 
-<footer id="status-bar"></footer>
+<footer id="status-bar">
+  <div class="medic-badge" id="medic-badge" onclick="toggleMedicPanel()" title="Medic watchdog status">
+    <span class="medic-dot unknown" id="medic-dot"></span>
+    <span id="medic-label">Medic</span>
+  </div>
+</footer>
 
 <script>
 const API = '';
