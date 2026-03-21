@@ -1,7 +1,7 @@
 /**
- * US-010: Tests for Dispatch button functionality in the dashboard.
- * Verifies HTML structure for confirm dialog, loading state, dispatched state,
- * error handling, and workflowId passthrough.
+ * US-006/US-010: Tests for Dispatch button functionality in the dashboard.
+ * Verifies HTML structure for confirm dialog (using showConfirmModal), loading state,
+ * dispatched state, error handling, and workflowId passthrough.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -13,7 +13,7 @@ const HTML_PATH = path.join(
   "../dist/server/index.html"
 );
 
-describe("US-010: Dispatch button functionality (HTML structure)", () => {
+describe("US-006/US-010: Dispatch button functionality (HTML structure)", () => {
   let html: string;
 
   before(() => {
@@ -27,11 +27,49 @@ describe("US-010: Dispatch button functionality (HTML structure)", () => {
     );
   });
 
-  it("confirm dialog is shown with entry title before dispatch", () => {
+  it("dispatchBacklogEntry uses showConfirmModal instead of native confirm()", () => {
+    const fnStart = html.indexOf("async function dispatchBacklogEntry(");
+    assert.ok(fnStart !== -1, "dispatchBacklogEntry function must exist");
+    const fnEnd = html.indexOf("\nasync function ", fnStart + 10);
+    const fn = fnEnd !== -1 ? html.slice(fnStart, fnEnd) : html.slice(fnStart, fnStart + 2000);
     assert.ok(
-      html.includes("confirm(`Dispatch \"${title}\" to the agent?`)") ||
-        html.includes('confirm(`Dispatch "${title}" to the agent?`)'),
-      "confirm dialog must include the entry title"
+      fn.includes("showConfirmModal("),
+      "dispatchBacklogEntry must use showConfirmModal()"
+    );
+    assert.ok(
+      !fn.includes("confirm(`Dispatch") && !fn.includes('confirm("Dispatch'),
+      "dispatchBacklogEntry must not use native confirm() for dispatch"
+    );
+  });
+
+  it("showConfirmModal is called with correct labels for dispatch", () => {
+    const fnStart = html.indexOf("async function dispatchBacklogEntry(");
+    assert.ok(fnStart !== -1, "dispatchBacklogEntry function must exist");
+    const fnEnd = html.indexOf("\nasync function ", fnStart + 10);
+    const fn = fnEnd !== -1 ? html.slice(fnStart, fnEnd) : html.slice(fnStart, fnStart + 2000);
+    assert.ok(
+      fn.includes("'Dispatch entry'") || fn.includes('"Dispatch entry"'),
+      "showConfirmModal must have title 'Dispatch entry'"
+    );
+    assert.ok(
+      fn.includes("confirmLabel: 'Dispatch'") || fn.includes('confirmLabel: "Dispatch"'),
+      "showConfirmModal must have confirmLabel: 'Dispatch'"
+    );
+    assert.ok(
+      fn.includes("cancelLabel: 'Cancel'") || fn.includes('cancelLabel: "Cancel"'),
+      "showConfirmModal must have cancelLabel: 'Cancel'"
+    );
+  });
+
+  it("on cancel (showConfirmModal returns false), dispatch is not triggered", () => {
+    const fnStart = html.indexOf("async function dispatchBacklogEntry(");
+    assert.ok(fnStart !== -1, "dispatchBacklogEntry function must exist");
+    const fnEnd = html.indexOf("\nasync function ", fnStart + 10);
+    const fn = fnEnd !== -1 ? html.slice(fnStart, fnEnd) : html.slice(fnStart, fnStart + 2000);
+    // Must return early when modal is declined
+    assert.ok(
+      fn.includes("if (!ok) return;"),
+      "dispatch must return early when user cancels showConfirmModal"
     );
   });
 
@@ -94,8 +132,6 @@ describe("US-010: Dispatch button functionality (HTML structure)", () => {
   });
 
   it("dispatched button is disabled in rendered HTML", () => {
-    // Check that rendered dispatched entries have disabled attribute on button
-    // (may also include hasActiveRun check for US-005)
     assert.ok(
       html.includes("isDispatched ? 'disabled' : ''") ||
         html.includes('isDispatched ? "disabled" : ""') ||
@@ -106,7 +142,6 @@ describe("US-010: Dispatch button functionality (HTML structure)", () => {
   });
 
   it("on success button text is 'Dispatched ✓' and disabled", () => {
-    // Both btn.textContent and btn.disabled should be set on success
     const dispatchFnStart = html.indexOf("async function dispatchBacklogEntry(");
     const dispatchFnEnd = html.indexOf("\n}", dispatchFnStart);
     const dispatchFn = html.slice(dispatchFnStart, dispatchFnEnd + 2);
@@ -117,18 +152,6 @@ describe("US-010: Dispatch button functionality (HTML structure)", () => {
     assert.ok(
       dispatchFn.includes("btn.disabled = true"),
       "success path must disable the button"
-    );
-  });
-
-  it("on cancel (confirm returns false), dispatch is not triggered", () => {
-    const dispatchFnStart = html.indexOf("async function dispatchBacklogEntry(");
-    const dispatchFnEnd = html.indexOf("\n}", dispatchFnStart);
-    const dispatchFn = html.slice(dispatchFnStart, dispatchFnEnd + 2);
-    // Must return early when confirm is declined
-    assert.ok(
-      dispatchFn.includes("if (!confirm(") &&
-        dispatchFn.includes(") return;"),
-      "dispatch must return early when user cancels confirm"
     );
   });
 

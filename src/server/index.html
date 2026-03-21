@@ -860,7 +860,7 @@ async function submitBacklogForm() {
 async function dispatchBacklogEntry(id, btn) {
   const card = btn.closest('[data-backlog-id]');
   const title = card ? (card.getAttribute('data-backlog-title') || id) : id;
-  if (!confirm(`Dispatch "${title}" to the agent?`)) return;
+  const ok = await showConfirmModal({ title: 'Dispatch entry', message: `Dispatch "${title}" to the agent?`, confirmLabel: 'Dispatch', cancelLabel: 'Cancel' }); if (!ok) return;
   const errEl = card ? card.querySelector('.backlog-card-error') : null;
   if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
   btn.disabled = true;
