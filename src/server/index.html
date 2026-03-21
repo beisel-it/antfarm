@@ -399,6 +399,32 @@ select:focus{outline:none;border-color:#8ECFC0}
   </div>
 </div>
 
+<!-- Edit Project Modal -->
+<div class="overlay" id="edit-project-modal-overlay" style="display:none" onclick="if(event.target===this)closeEditProjectModal()">
+  <div class="panel" id="edit-project-modal">
+    <button class="panel-close" onclick="closeEditProjectModal()">✕</button>
+    <h2>Edit Project</h2>
+    <form id="edit-project-form" onsubmit="return false">
+      <div class="backlog-modal-field">
+        <label for="ep-name">Name <span style="color:var(--accent-orange)">*</span></label>
+        <input type="text" id="ep-name" required placeholder="Project name">
+      </div>
+      <div class="backlog-modal-field">
+        <label for="ep-git-path">Git Repo Path</label>
+        <input type="text" id="ep-git-path" placeholder="/path/to/repo">
+      </div>
+      <div class="backlog-modal-field">
+        <label for="ep-github-url">GitHub Repo URL</label>
+        <input type="text" id="ep-github-url" placeholder="https://github.com/owner/repo">
+      </div>
+      <div class="backlog-modal-actions">
+        <button type="button" id="ep-save-btn" class="backlog-modal-save-btn" onclick="submitEditProjectForm()">Save</button>
+        <button type="button" class="backlog-modal-cancel-btn" onclick="closeEditProjectModal()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <footer id="status-bar">
   <div class="medic-badge" id="medic-badge" onclick="toggleMedicPanel()" title="Medic watchdog status">
     <span class="medic-dot unknown" id="medic-dot"></span>
@@ -686,6 +712,50 @@ async function submitAddProject() {
     await loadProjects();
     rerenderProjectsColumn();
   } catch { /* ignore */ }
+}
+
+let editingProjectId = null;
+
+function editProject(id) {
+  const project = projects.find(p => p.id === id);
+  if (!project) return;
+  editingProjectId = id;
+  const nameInput = document.getElementById('ep-name');
+  const gitPathInput = document.getElementById('ep-git-path');
+  const githubUrlInput = document.getElementById('ep-github-url');
+  if (nameInput) nameInput.value = project.name || '';
+  if (gitPathInput) gitPathInput.value = project.git_repo_path || '';
+  if (githubUrlInput) githubUrlInput.value = project.github_repo_url || '';
+  const overlay = document.getElementById('edit-project-modal-overlay');
+  if (overlay) overlay.style.display = 'flex';
+  if (nameInput) nameInput.focus();
+}
+
+function closeEditProjectModal() {
+  const overlay = document.getElementById('edit-project-modal-overlay');
+  if (overlay) overlay.style.display = 'none';
+  editingProjectId = null;
+}
+
+async function submitEditProjectForm() {
+  if (!editingProjectId) return;
+  const name = document.getElementById('ep-name')?.value?.trim();
+  if (!name) return;
+  const git_repo_path = document.getElementById('ep-git-path')?.value?.trim() || null;
+  const github_repo_url = document.getElementById('ep-github-url')?.value?.trim() || null;
+  try {
+    const res = await fetch(API + '/api/projects/' + encodeURIComponent(editingProjectId), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, git_repo_path, github_repo_url })
+    });
+    if (!res.ok) throw new Error('Update failed');
+    closeEditProjectModal();
+    await loadProjects();
+    rerenderProjectsColumn();
+  } catch (e) {
+    alert('Failed to update project: ' + e.message);
+  }
 }
 
 function deleteProject(id, btn) {
