@@ -77,6 +77,42 @@ describe('Loop group CSS classes in dist/server/index.html', () => {
     assert.ok(html.includes('.loop-badge-wrapper'), '.loop-badge-wrapper class should exist');
   });
 
+  test('US-001 AC1: .loop-group-label::before with content ↻ is removed', () => {
+    assert.ok(
+      !html.includes(".loop-group-label::before"),
+      '.loop-group-label::before pseudo-element rule should be removed'
+    );
+  });
+
+  test('US-001 AC2: .loop-counter CSS class exists with font-size, font-weight, and color', () => {
+    assert.ok(html.includes('.loop-counter'), '.loop-counter class should exist');
+    assert.ok(
+      /\.loop-counter\{[^}]*font-size:/.test(html),
+      '.loop-counter should have font-size property'
+    );
+    assert.ok(
+      /\.loop-counter\{[^}]*font-weight:/.test(html),
+      '.loop-counter should have font-weight property'
+    );
+    assert.ok(
+      /\.loop-counter\{[^}]*color:/.test(html),
+      '.loop-counter should have color property'
+    );
+  });
+
+  test('US-001 AC3: .loop-counter is not display:block (renders inline)', () => {
+    // Verify it does not use display:block
+    assert.ok(
+      !/\.loop-counter\{[^}]*display:block/.test(html),
+      '.loop-counter should not use display:block'
+    );
+    // It should use inline, inline-flex, or inline-block
+    const hasInlineDisplay =
+      /\.loop-counter\{[^}]*display:inline/.test(html) ||
+      !/\.loop-counter\{[^}]*display:/.test(html); // absence of display:block is also fine
+    assert.ok(hasInlineDisplay, '.loop-counter should render inline');
+  });
+
   test('--loop-border custom property is defined in :root', () => {
     const rootIdx = html.indexOf(':root {');
     const rootEnd = html.indexOf('}', rootIdx);
