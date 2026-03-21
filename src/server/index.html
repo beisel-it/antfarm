@@ -617,7 +617,7 @@ function renderBacklogColumn() {
         const dispatchDisabled = isDispatched || hasActiveRun ? 'disabled' : '';
         const dispatchClass = hasActiveRun ? 'backlog-dispatch-btn backlog-dispatch-btn--blocked' : 'backlog-dispatch-btn';
         const dispatchTitle = hasActiveRun ? 'title="Project run already in flight"' : '';
-        return `<div class="backlog-card ${cls}" data-backlog-id="${entry.id}" data-backlog-title="${esc(entry.title)}">
+        return `<div class="backlog-card ${cls}" data-backlog-id="${entry.id}" data-backlog-title="${esc(entry.title)}" onclick="openBacklogEntryEdit('${entry.id}')" style="cursor:pointer">
           <div class="backlog-card-title" title="${esc(entry.title)}">${checkIcon}${esc(entry.title)}</div>
           <div class="backlog-card-error" style="display:none;color:var(--status-failed,#e05);font-size:11px;margin-top:4px"></div>
           <div class="backlog-card-meta">
@@ -625,8 +625,8 @@ function renderBacklogColumn() {
               <span class="badge badge-${entry.status} backlog-status-badge">${entry.status}</span>
               ${priorityBadge}
             </span>
-            <button class="${dispatchClass}" onclick="dispatchBacklogEntry('${entry.id}',this)" ${dispatchDisabled} ${dispatchTitle}>${btnLabel}</button>
-            <button class="backlog-delete-btn" onclick="deleteBacklogEntry('${entry.id}',this)" title="Delete">✕</button>
+            <button class="${dispatchClass}" onclick="event.stopPropagation();dispatchBacklogEntry('${entry.id}',this)" ${dispatchDisabled} ${dispatchTitle}>${btnLabel}</button>
+            <button class="backlog-delete-btn" onclick="event.stopPropagation();deleteBacklogEntry('${entry.id}',this)" title="Delete">✕</button>
           </div>
         </div>`;
       }).join('');
@@ -650,6 +650,24 @@ function openBacklogForm() {
   document.getElementById('bm-tags').value = '';
   document.getElementById('bm-priority').value = '';
   heading.textContent = 'New Backlog Entry';
+  overlay.style.display = 'flex';
+  overlay.classList.add('open');
+  document.getElementById('bm-title').focus();
+}
+
+function openBacklogEntryEdit(id) {
+  const entry = backlogEntries.find(e => e.id === id);
+  if (!entry) return;
+  editingBacklogId = id;
+  const overlay = document.getElementById('backlog-modal-overlay');
+  const heading = document.getElementById('backlog-modal-title-heading');
+  document.getElementById('bm-title').value = entry.title || '';
+  document.getElementById('bm-description').value = entry.description || '';
+  document.getElementById('bm-criteria').value = entry.acceptance_criteria || '';
+  document.getElementById('bm-notes').value = entry.notes || '';
+  document.getElementById('bm-tags').value = entry.tags || '';
+  document.getElementById('bm-priority').value = entry.priority != null ? String(entry.priority) : '';
+  heading.textContent = 'Edit Backlog Entry';
   overlay.style.display = 'flex';
   overlay.classList.add('open');
   document.getElementById('bm-title').focus();
@@ -687,27 +705,55 @@ async function submitBacklogForm() {
   const saveBtn = document.getElementById('backlog-save-btn');
   if (saveBtn) saveBtn.disabled = true;
   try {
-    const body = {
-      title,
-      description: document.getElementById('bm-description').value.trim() || null,
-      notes: document.getElementById('bm-notes').value.trim() || null,
-      tags: document.getElementById('bm-tags').value.trim() || null,
-      acceptanceCriteria: document.getElementById('bm-criteria').value.trim() || null,
-      priority: document.getElementById('bm-priority').value !== '' ? Number(document.getElementById('bm-priority').value) : null,
-    };
-    const r = await fetch(API + '/api/backlog', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if (r.status === 201) {
-      closeBacklogModal();
-      await loadBacklog();
-      renderBoard(currentWf, runs);
+    const priorityRaw = document.getElementById('bm-priority').value;
+    if (editingBacklogId) {
+      // PATCH (edit mode) — snake_case fields
+      const body = {
+        title,
+        description: document.getElementById('bm-description').value.trim() || null,
+        notes: document.getElementById('bm-notes').value.trim() || null,
+        tags: document.getElementById('bm-tags').value.trim() || null,
+        acceptance_criteria: document.getElementById('bm-criteria').value.trim() || null,
+        priority: priorityRaw !== '' ? Number(priorityRaw) : null,
+      };
+      const r = await fetch(API + `/api/backlog/${editingBacklogId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (r.status === 200) {
+        closeBacklogModal();
+        await loadBacklog();
+        renderBoard(currentWf, runs);
+      } else {
+        const data = await r.json().catch(() => ({}));
+        errEl.textContent = (data && data.error) ? data.error : 'Failed to update entry';
+        errEl.style.display = 'block';
+      }
     } else {
-      const data = await r.json().catch(() => ({}));
-      errEl.textContent = (data && data.error) ? data.error : 'Failed to save entry';
-      errEl.style.display = 'block';
+      // POST (create mode) — camelCase fields
+      const body = {
+        title,
+        description: document.getElementById('bm-description').value.trim() || null,
+        notes: document.getElementById('bm-notes').value.trim() || null,
+        tags: document.getElementById('bm-tags').value.trim() || null,
+        acceptanceCriteria: document.getElementById('bm-criteria').value.trim() || null,
+        priority: priorityRaw !== '' ? Number(priorityRaw) : null,
+      };
+      const r = await fetch(API + '/api/backlog', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (r.status === 201) {
+        closeBacklogModal();
+        await loadBacklog();
+        renderBoard(currentWf, runs);
+      } else {
+        const data = await r.json().catch(() => ({}));
+        errEl.textContent = (data && data.error) ? data.error : 'Failed to save entry';
+        errEl.style.display = 'block';
+      }
     }
   } catch (e) {
     errEl.textContent = 'Network error — please try again';

@@ -42,8 +42,7 @@ describe("US-012: Delete button HTML structure", () => {
 
   it("delete button wires onclick to deleteBacklogEntry", () => {
     assert.ok(
-      html.includes("onclick=\"deleteBacklogEntry(") ||
-        html.includes("onclick='deleteBacklogEntry("),
+      html.includes("deleteBacklogEntry("),
       "delete button must call deleteBacklogEntry on click"
     );
   });
