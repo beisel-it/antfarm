@@ -299,7 +299,7 @@ steps:
       {{local_context_packet_json}}
 
       Required workflow:
-      1. Spawn specialized subagents using sessions_spawn.
+      1. Spawn specialized subagents using sessions_spawn. Immediately after each spawn, check whether the subagent was spawned successfully. If sessions_spawn returns an error or does not return a session ID, retry the spawn up to three times before continuing.
       2. Use these installed agent IDs:
          - deep-research_scout
          - deep-research_analyst

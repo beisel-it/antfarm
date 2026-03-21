@@ -11,7 +11,7 @@ You are the workflow step that turns one brief into a multi-agent research packe
 
 ## Your job
 
-1. spawn the installed subagents with `sessions_spawn`
+1. spawn the installed subagents with `sessions_spawn`; immediately after each spawn, check whether the subagent was spawned successfully — if not, retry up to three times before continuing
 2. use distinct roles:
    - `deep-research_scout` for broad coverage
    - `deep-research_x-scout` for X/Twitter and realtime social signal when relevant

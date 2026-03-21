@@ -116,7 +116,7 @@
 
 /* ── Base ──────────────────────────────────────────────────────── */
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg-page);color:var(--text-primary);min-height:100vh}
+body{font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg-page);color:var(--text-primary);min-height:100vh;padding-bottom:36px}
 header{background:var(--header-bg);border-bottom:2px solid var(--header-border);padding:12px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
 header img{height:36px;border-radius:6px}
 header h1{font-family:'Inter',sans-serif;font-size:22px;font-weight:600;color:#fff;letter-spacing:0}
@@ -130,7 +130,7 @@ select:focus{outline:none;border-color:#8ECFC0}
 .theme-toggle:hover{border-color:rgba(255,255,255,.5)}
 
 /* ── Board ─────────────────────────────────────────────────────── */
-.board{display:flex;gap:16px;padding:24px;overflow-x:auto;min-height:calc(100vh - 65px)}
+.board{display:flex;gap:16px;padding:24px;overflow-x:auto;min-height:calc(100vh - 101px)}
 .column{min-width:240px;flex:1;background:var(--bg-surface);border:none;border-radius:8px;display:flex;flex-direction:column;box-shadow:0 2px 8px var(--shadow)}
 .column-header{padding:12px 16px;border-bottom:1px solid var(--border-light);font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--accent-green);background:var(--bg-column-header);border-radius:8px 8px 0 0}
 .column-header .count{background:var(--accent-green);color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;margin-left:8px}
@@ -210,7 +210,7 @@ select:focus{outline:none;border-color:#8ECFC0}
 
 /* ── Misc ──────────────────────────────────────────────────────── */
 .empty{color:var(--text-secondary);font-size:12px;text-align:center;padding:24px 8px}
-.refresh-note{color:rgba(255,255,255,.6);font-size:11px;margin-left:auto}
+.refresh-note{color:rgba(255,255,255,.6);font-size:11px}
 @media(max-width:768px){.board{flex-direction:column}.column{min-width:unset}}
 .story-open{display:block!important}
 .story-chevron-open{transform:rotate(90deg)}
@@ -227,7 +227,7 @@ select:focus{outline:none;border-color:#8ECFC0}
 .medic-dot.unknown{background:#9ca3af}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
 
-.medic-panel{position:fixed;top:60px;right:16px;width:340px;max-height:500px;background:var(--bg-surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 32px var(--shadow-heavy);z-index:50;overflow:hidden;display:none;flex-direction:column}
+.medic-panel{position:fixed;bottom:40px;right:16px;width:340px;max-height:500px;background:var(--bg-surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 32px var(--shadow-heavy);z-index:50;overflow:hidden;display:none;flex-direction:column}
 .medic-panel.open{display:flex}
 .medic-panel-header{padding:14px 16px;border-bottom:1px solid var(--border-light);font-size:14px;font-weight:600;color:var(--text-primary);display:flex;align-items:center;gap:8px}
 .medic-panel-body{padding:12px 16px;overflow-y:auto;flex:1}
@@ -302,6 +302,9 @@ select:focus{outline:none;border-color:#8ECFC0}
 .backlog-inline-confirm-delete:hover{opacity:.85}
 .backlog-inline-confirm-cancel{background:none;border:1px solid var(--border);border-radius:3px;padding:2px 8px;font-size:11px;color:var(--text-secondary);cursor:pointer}
 .backlog-inline-confirm-cancel:hover{background:var(--bg-surface);color:var(--text-primary)}
+
+/* ── Status bar ────────────────────────────────────────────────── */
+#status-bar{position:fixed;bottom:0;left:0;right:0;height:36px;background:var(--header-bg);border-top:1px solid var(--header-border);display:flex;align-items:center;padding:0 16px;gap:16px;z-index:40;font-size:11px;color:rgba(255,255,255,.75)}
 </style>
 </head>
 <body>
@@ -315,11 +318,6 @@ select:focus{outline:none;border-color:#8ECFC0}
     <button class="status-filter-btn" data-status="cancelled">cancelled</button>
   </div>
   <button class="theme-toggle" id="theme-toggle" title="Toggle light/dark mode" aria-label="Toggle light/dark mode">☀️</button>
-  <div class="medic-badge" id="medic-badge" onclick="toggleMedicPanel()" title="Medic watchdog status">
-    <span class="medic-dot unknown" id="medic-dot"></span>
-    <span id="medic-label">Medic</span>
-  </div>
-  <span class="refresh-note" id="refresh-note">Auto-refresh: 30s</span>
 </header>
 <div class="board" id="board"><div class="empty" style="margin:auto">Select a workflow</div></div>
 <div class="medic-panel" id="medic-panel">
@@ -388,6 +386,16 @@ select:focus{outline:none;border-color:#8ECFC0}
   </div>
 </div>
 
+<footer id="status-bar">
+  <div class="medic-badge" id="medic-badge" onclick="toggleMedicPanel()" title="Medic watchdog status">
+    <span class="medic-dot unknown" id="medic-dot"></span>
+    <span id="medic-label">Medic</span>
+  </div>
+  <span class="refresh-note" id="refresh-note">Auto-refresh: 30s</span>
+  <span id="last-refreshed">Last refresh: —</span>
+  <span id="next-refresh">Next: 30s</span>
+</footer>
+
 <script>
 const API = '';
 let workflows = [];
@@ -398,6 +406,7 @@ let backlogEntries = [];
 let editingBacklogId = null;
 let projects = [];
 let allRuns = [];
+let lastRefreshTime = Date.now();
 
 // ── Status filters ───────────────────────────────────────────────
 const STATUS_FILTER_KEY = 'antfarm-status-filter';
@@ -487,6 +496,7 @@ async function loadBacklog() {
   } catch {
     backlogEntries = [];
   }
+  updateLastRefreshed();
 }
 
 async function loadProjects() {
@@ -495,6 +505,7 @@ async function loadProjects() {
   } catch {
     projects = [];
   }
+  updateLastRefreshed();
 }
 
 function renderProjectsColumn() {
@@ -648,6 +659,12 @@ async function loadProjectDetail(detailsEl) {
   }
 }
 
+function updateLastRefreshed() {
+  const el = document.getElementById('last-refreshed');
+  if (el) el.textContent = 'Last refresh: ' + new Date().toLocaleTimeString();
+  lastRefreshTime = Date.now();
+}
+
 async function loadRuns() {
   if (!currentWf) return;
   const [runs] = await Promise.all([
@@ -657,6 +674,7 @@ async function loadRuns() {
   ]);
   allRuns = runs;
   renderBoard(currentWf, runs);
+  updateLastRefreshed();
 }
 
 function getActiveStepId(run) {
@@ -1272,6 +1290,17 @@ setInterval(() => {
     });
   }
 }, 30000);
+
+setInterval(() => {
+  const el = document.getElementById('next-refresh');
+  if (!el) return;
+  const remaining = 30 - Math.floor((Date.now() - lastRefreshTime) / 1000);
+  if (remaining <= 0) {
+    el.textContent = 'Refreshing...';
+  } else {
+    el.textContent = 'Next: ' + remaining + 's';
+  }
+}, 1000);
 
 // ── Medic ───────────────────────────────────────────────────────
 let medicPanelOpen = false;
