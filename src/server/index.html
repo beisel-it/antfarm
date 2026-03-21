@@ -503,14 +503,48 @@ function selectWorkflow(id) {
   else document.getElementById('board').innerHTML = '<div class="empty" style="margin:auto">Select a workflow</div>';
 }
 
+async function fetchBacklogForProjects(pids) {
+  if (pids.length === 1) {
+    const wfPart = currentWf ? `&workflow=${encodeURIComponent(currentWf.id)}` : '';
+    return fetchJSON(`/api/backlog?project=${encodeURIComponent(pids[0])}${wfPart}`);
+  }
+  // Multi-select: fetch in parallel, merge and deduplicate
+  const results = await Promise.all(
+    pids.map(pid => {
+      const wfPart = currentWf ? `&workflow=${encodeURIComponent(currentWf.id)}` : '';
+      return fetchJSON(`/api/backlog?project=${encodeURIComponent(pid)}${wfPart}`);
+    })
+  );
+  const seen = new Set();
+  const merged = [];
+  for (const entries of results) {
+    for (const entry of entries) {
+      if (!seen.has(entry.id)) {
+        seen.add(entry.id);
+        merged.push(entry);
+      }
+    }
+  }
+  // Sort by priority DESC, then created_at ASC (same as server-side)
+  merged.sort((a, b) => {
+    if (b.priority !== a.priority) return b.priority - a.priority;
+    return a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0;
+  });
+  return merged;
+}
+
 async function loadBacklog() {
   try {
-    const qs = currentWf ? `?workflow=${encodeURIComponent(currentWf.id)}` : '';
-    backlogEntries = await fetchJSON(`/api/backlog${qs}`);
+    updateLastRefreshed();
+    if (selectedProjectIds.length === 0) {
+      const qs = currentWf ? `?workflow=${encodeURIComponent(currentWf.id)}` : '';
+      backlogEntries = await fetchJSON(`/api/backlog${qs}`);
+    } else {
+      backlogEntries = await fetchBacklogForProjects(selectedProjectIds);
+    }
   } catch {
     backlogEntries = [];
   }
-  updateLastRefreshed();
 }
 
 async function loadProjects() {
@@ -599,6 +633,12 @@ function toggleProjectSelection(id) {
     const tmp = document.createElement('div');
     tmp.innerHTML = renderProjectsBar();
     bar.replaceWith(tmp.firstElementChild);
+  }
+  // Reload data filtered by selected projects
+  if (currentWf) {
+    loadRuns();
+  } else {
+    loadBacklog().then(() => renderBoard());
   }
 }
 
