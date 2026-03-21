@@ -353,6 +353,12 @@ select:focus{outline:none;border-color:#8ECFC0}
         <input type="number" id="bm-priority" min="0" max="10" placeholder="5">
       </div>
       <div class="backlog-modal-field">
+        <label for="bm-workflow-id">Workflow <span style="color:var(--accent-orange)">*</span></label>
+        <select id="bm-workflow-id">
+          <option value="">— No workflow —</option>
+        </select>
+      </div>
+      <div class="backlog-modal-field">
         <label for="bm-project-id">Project</label>
         <select id="bm-project-id">
           <option value="">— No project —</option>
@@ -693,6 +699,13 @@ function renderBacklogColumn() {
   </div>`;
 }
 
+function populateWorkflowSelect(selectedId) {
+  const sel = document.getElementById('bm-workflow-id');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— No workflow —</option>' +
+    workflows.map(w => `<option value="${esc(w.id)}"${w.id === selectedId ? ' selected' : ''}>${esc(w.name)}</option>`).join('');
+}
+
 function populateProjectSelect(selectedId) {
   const sel = document.getElementById('bm-project-id');
   if (!sel) return;
@@ -710,6 +723,7 @@ function openBacklogForm() {
   document.getElementById('bm-notes').value = '';
   document.getElementById('bm-tags').value = '';
   document.getElementById('bm-priority').value = '';
+  populateWorkflowSelect(currentWf ? currentWf.id : null);
   populateProjectSelect(null);
   heading.textContent = 'New Backlog Entry';
   overlay.style.display = 'flex';
@@ -729,6 +743,7 @@ function openBacklogEntryEdit(id) {
   document.getElementById('bm-notes').value = entry.notes || '';
   document.getElementById('bm-tags').value = entry.tags || '';
   document.getElementById('bm-priority').value = entry.priority != null ? String(entry.priority) : '';
+  populateWorkflowSelect(entry.workflow_id || null);
   populateProjectSelect(entry.project_id || null);
   heading.textContent = 'Edit Backlog Entry';
   overlay.style.display = 'flex';
@@ -770,6 +785,7 @@ async function submitBacklogForm() {
   try {
     const priorityRaw = document.getElementById('bm-priority').value;
     const projectIdVal = document.getElementById('bm-project-id').value || null;
+    const workflowIdVal = document.getElementById('bm-workflow-id').value || null;
     if (editingBacklogId) {
       // PATCH (edit mode) — snake_case fields
       const body = {
@@ -780,6 +796,7 @@ async function submitBacklogForm() {
         acceptance_criteria: document.getElementById('bm-criteria').value.trim() || null,
         priority: priorityRaw !== '' ? Number(priorityRaw) : null,
         project_id: projectIdVal,
+        workflow_id: workflowIdVal,
       };
       const r = await fetch(API + `/api/backlog/${editingBacklogId}`, {
         method: 'PATCH',
@@ -805,6 +822,7 @@ async function submitBacklogForm() {
         acceptanceCriteria: document.getElementById('bm-criteria').value.trim() || null,
         priority: priorityRaw !== '' ? Number(priorityRaw) : null,
         projectId: projectIdVal,
+        workflowId: workflowIdVal,
       };
       const r = await fetch(API + '/api/backlog', {
         method: 'POST',
