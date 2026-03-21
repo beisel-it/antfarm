@@ -290,6 +290,12 @@ select:focus{outline:none;border-color:#8ECFC0}
 .inline-confirm{display:inline-flex;align-items:center;gap:4px;overflow:hidden}
 .inline-confirm-actions{display:inline-flex;align-items:center;gap:4px;max-width:0;overflow:hidden;transition:max-width .2s ease,opacity .2s ease;opacity:0}
 .inline-confirm.active .inline-confirm-actions{max-width:200px;opacity:1}
+.project-inline-confirm{display:none;align-items:center;gap:4px;position:absolute;top:4px;right:30px;background:var(--bg-surface-alt);border:1px solid var(--border);border-radius:4px;padding:3px 6px;z-index:1}
+.project-inline-confirm.active{display:inline-flex}
+.project-inline-confirm-delete{background:var(--accent-orange);border:none;border-radius:3px;padding:2px 8px;font-size:11px;color:#fff;cursor:pointer}
+.project-inline-confirm-delete:hover{opacity:.85}
+.project-inline-confirm-cancel{background:none;border:1px solid var(--border);border-radius:3px;padding:2px 8px;font-size:11px;color:var(--text-secondary);cursor:pointer}
+.project-inline-confirm-cancel:hover{background:var(--bg-surface);color:var(--text-primary)}
 </style>
 </head>
 <body>
@@ -489,8 +495,12 @@ function renderProjectsColumn() {
         const urlLine = p.github_repo_url
           ? `<div><a class="project-card-link" href="${esc(p.github_repo_url)}" target="_blank" rel="noopener">${esc(p.github_repo_url)}</a></div>`
           : '';
-        return `<div class="project-card">
-          <button class="project-delete-btn" onclick="deleteProject('${esc(p.id)}')" title="Delete project">✕</button>
+        return `<div class="project-card" data-project-id="${esc(p.id)}">
+          <button class="project-delete-btn" onclick="deleteProject('${esc(p.id)}', this)" title="Delete project">✕</button>
+          <div class="project-inline-confirm">
+            <button class="project-inline-confirm-delete" onclick="confirmDeleteProject('${esc(p.id)}', this.closest('.project-card'))">Delete</button>
+            <button class="project-inline-confirm-cancel" onclick="cancelDeleteProject(this.closest('.project-card'))">Cancel</button>
+          </div>
           <div class="project-card-name" title="${esc(p.name)}">${esc(p.name)}</div>
           <div class="project-card-meta">${pathLine}${urlLine}</div>
           <details class="project-detail" data-project-id="${esc(p.id)}" ontoggle="loadProjectDetail(this)">
@@ -561,13 +571,25 @@ async function submitAddProject() {
   } catch { /* ignore */ }
 }
 
-async function deleteProject(id) {
-  if (!confirm('Delete this project?')) return;
+function deleteProject(id, btn) {
+  const card = btn.closest('.project-card');
+  const inlineConfirm = card.querySelector('.project-inline-confirm');
+  if (inlineConfirm) inlineConfirm.classList.add('active');
+}
+
+async function confirmDeleteProject(id, card) {
+  const inlineConfirm = card.querySelector('.project-inline-confirm');
+  if (inlineConfirm) inlineConfirm.classList.remove('active');
   try {
     await fetch(API + '/api/projects/' + encodeURIComponent(id), { method: 'DELETE' });
     await loadProjects();
     rerenderProjectsColumn();
   } catch { /* ignore */ }
+}
+
+function cancelDeleteProject(card) {
+  const inlineConfirm = card.querySelector('.project-inline-confirm');
+  if (inlineConfirm) inlineConfirm.classList.remove('active');
 }
 
 function rerenderProjectsColumn() {
