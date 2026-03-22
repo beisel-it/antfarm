@@ -101,7 +101,7 @@ export function deleteBacklogEntry(id: string): boolean {
 
 export function listBacklogEntries(filters?: { workflow_id?: string; project_id?: string }): BacklogEntry[] {
   const db = getDb();
-  const SELECT = "SELECT id, title, description, status, priority, run_id, project_id, workflow_id, notes, tags, acceptance_criteria, created_at, updated_at FROM backlog";
+  const SELECT = "SELECT id, title, description, status, priority, run_id, project_id, workflow_id, notes, tags, acceptance_criteria, queue_order, created_at, updated_at FROM backlog";
   const ORDER = "ORDER BY priority DESC, created_at ASC";
 
   if (filters?.workflow_id && filters?.project_id) {
@@ -129,7 +129,7 @@ export function getBacklogEntry(id: string): BacklogEntry | null {
   const db = getDb();
   const row = db
     .prepare(
-      "SELECT id, title, description, status, priority, run_id, project_id, workflow_id, notes, tags, acceptance_criteria, created_at, updated_at FROM backlog WHERE id = ?"
+      "SELECT id, title, description, status, priority, run_id, project_id, workflow_id, notes, tags, acceptance_criteria, queue_order, created_at, updated_at FROM backlog WHERE id = ?"
     )
     .get(id) as unknown as BacklogEntry | undefined;
   return row ?? null;
@@ -139,7 +139,7 @@ export function listBacklogEntriesForProject(projectId: string): BacklogEntry[] 
   const db = getDb();
   return db
     .prepare(
-      "SELECT id, title, description, status, priority, run_id, project_id, workflow_id, notes, tags, acceptance_criteria, created_at, updated_at FROM backlog WHERE project_id = ? ORDER BY priority DESC, created_at ASC"
+      "SELECT id, title, description, status, priority, run_id, project_id, workflow_id, notes, tags, acceptance_criteria, queue_order, created_at, updated_at FROM backlog WHERE project_id = ? ORDER BY priority DESC, created_at ASC"
     )
     .all(projectId) as unknown as BacklogEntry[];
 }
