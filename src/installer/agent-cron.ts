@@ -230,6 +230,9 @@ async function workflowCronsExist(workflowId: string): Promise<boolean> {
  * No-ops if crons already exist (another run of the same workflow is active).
  */
 export async function ensureWorkflowCrons(workflow: WorkflowSpec): Promise<void> {
+  // No-op in test environments
+  if (process.env.ANTFARM_SKIP_CRON === '1') return;
+
   if (await workflowCronsExist(workflow.id)) return;
 
   // Preflight: verify cron tool is accessible before attempting to create jobs
