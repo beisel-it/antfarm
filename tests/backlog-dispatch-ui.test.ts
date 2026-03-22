@@ -136,7 +136,9 @@ describe("US-006/US-010: Dispatch button functionality (HTML structure)", () => 
       html.includes("isDispatched ? 'disabled' : ''") ||
         html.includes('isDispatched ? "disabled" : ""') ||
         html.includes("isDispatched || hasActiveRun ? 'disabled'") ||
-        html.includes('isDispatched || hasActiveRun ? "disabled"'),
+        html.includes('isDispatched || hasActiveRun ? "disabled"') ||
+        html.includes("isDispatched || hasActiveRun || isQueued ? 'disabled'") ||
+        html.includes('isDispatched || hasActiveRun || isQueued ? "disabled"'),
       "dispatched entries must render with disabled button"
     );
   });

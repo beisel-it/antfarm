@@ -63,7 +63,9 @@ describe("US-005: Dispatch button disabled when project run is active (HTML stru
     assert.ok(
       html.includes("hasActiveRun") &&
         (html.includes("isDispatched || hasActiveRun ? 'disabled'") ||
-         html.includes("isDispatched || hasActiveRun ? \"disabled\"")),
+         html.includes("isDispatched || hasActiveRun ? \"disabled\"") ||
+         html.includes("isDispatched || hasActiveRun || isQueued ? 'disabled'") ||
+         html.includes("isDispatched || hasActiveRun || isQueued ? \"disabled\"")),
       "dispatch button must be disabled when hasActiveRun is true"
     );
   });

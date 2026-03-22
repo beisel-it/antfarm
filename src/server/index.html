@@ -198,6 +198,12 @@ select:focus{outline:none;border-color:#8ECFC0}
 .backlog-dispatch-btn--blocked{background:var(--accent-orange);cursor:not-allowed}
 .backlog-delete-btn{background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:12px;padding:2px 5px;border-radius:3px;line-height:1}
 .backlog-delete-btn:hover{color:var(--accent-orange);background:var(--accent-orange-subtle)}
+.backlog-queue-btn{background:var(--accent-teal);color:#fff;border:none;border-radius:4px;padding:3px 8px;font-size:11px;font-weight:600;cursor:pointer;transition:opacity .15s}
+.backlog-queue-btn:hover{opacity:.85}
+.backlog-queue-btn:disabled{opacity:.5;cursor:not-allowed}
+.badge-queued{background:var(--accent-teal-subtle);color:var(--accent-teal);border-radius:4px;padding:2px 7px;font-size:11px;font-weight:600;display:inline-flex;align-items:center;gap:4px}
+.backlog-unqueue-btn{background:none;border:1px solid var(--accent-teal);color:var(--accent-teal);border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer;transition:opacity .15s}
+.backlog-unqueue-btn:hover{opacity:.7}
 
 /* ── Status filter buttons ─────────────────────────────────────── */
 .status-filter-bar{display:flex;align-items:center;gap:6px}
@@ -990,6 +996,7 @@ function renderBacklogColumn() {
     ? '<div class="empty">No backlog entries</div>'
     : entries.map(entry => {
         const isDispatched = entry.status === 'dispatched';
+        const isQueued = entry.status === 'queued';
         const hasActiveRun = entry.project_id
           ? allRuns.some(r => r.project_id === entry.project_id && r.status === 'running')
           : false;
@@ -999,9 +1006,15 @@ function renderBacklogColumn() {
           : '';
         const checkIcon = isDispatched ? '✓ ' : '';
         const btnLabel = isDispatched ? 'Dispatched ✓' : 'Dispatch';
-        const dispatchDisabled = isDispatched || hasActiveRun ? 'disabled' : '';
-        const dispatchClass = hasActiveRun ? 'backlog-dispatch-btn backlog-dispatch-btn--blocked' : 'backlog-dispatch-btn';
+        const dispatchDisabled = isDispatched || hasActiveRun || isQueued ? 'disabled' : '';
+        const dispatchClass = (hasActiveRun || isQueued) && !isDispatched ? 'backlog-dispatch-btn backlog-dispatch-btn--blocked' : 'backlog-dispatch-btn';
         const dispatchTitle = hasActiveRun ? 'title="Project run already in flight"' : '';
+        const queueBtnHTML = (hasActiveRun && !isDispatched && !isQueued)
+          ? `<button class="backlog-queue-btn" onclick="event.stopPropagation();queueBacklogEntry('${entry.id}',this)">Queue</button>`
+          : '';
+        const queuedIndicatorHTML = isQueued
+          ? `<span class="badge-queued">Queued ✓</span><button class="backlog-unqueue-btn" onclick="event.stopPropagation();unqueueBacklogEntry('${entry.id}',this)" title="Unqueue">✕</button>`
+          : '';
         return `<div class="backlog-card ${cls}" data-backlog-id="${entry.id}" data-backlog-title="${esc(entry.title)}" onclick="openBacklogEntryEdit('${entry.id}')" style="cursor:pointer">
           <div class="backlog-card-title" title="${esc(entry.title)}">${checkIcon}${esc(entry.title)}</div>
           <div class="backlog-card-error" style="display:none;color:var(--status-failed,#e05);font-size:11px;margin-top:4px"></div>
@@ -1010,7 +1023,11 @@ function renderBacklogColumn() {
               <span class="badge badge-${entry.status} backlog-status-badge">${entry.status}</span>
               ${priorityBadge}
             </span>
-            <button class="${dispatchClass}" onclick="event.stopPropagation();dispatchBacklogEntry('${entry.id}',this)" ${dispatchDisabled} ${dispatchTitle}>${btnLabel}</button>
+            <span style="display:flex;gap:4px;align-items:center">
+              ${queuedIndicatorHTML}
+              ${queueBtnHTML}
+              <button class="${dispatchClass}" onclick="event.stopPropagation();dispatchBacklogEntry('${entry.id}',this)" ${dispatchDisabled} ${dispatchTitle}>${btnLabel}</button>
+            </span>
             <button class="backlog-delete-btn" onclick="event.stopPropagation();deleteBacklogEntry('${entry.id}',this)" title="Delete">✕</button>
           </div>
           <div class="backlog-inline-confirm">
@@ -1216,6 +1233,54 @@ async function dispatchBacklogEntry(id, btn) {
     btn.disabled = false;
     btn.textContent = 'Dispatch';
     const msg = 'Dispatch failed: ' + (e instanceof Error ? e.message : String(e));
+    if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; }
+  }
+}
+
+async function queueBacklogEntry(id, btn) {
+  const card = btn.closest('[data-backlog-id]');
+  const errEl = card ? card.querySelector('.backlog-card-error') : null;
+  if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+  btn.disabled = true;
+  btn.textContent = 'Queuing...';
+  try {
+    const body = JSON.stringify({ workflowId: currentWf?.id });
+    const r = await fetch(API + `/api/backlog/${id}/queue`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+    const data = await r.json();
+    if (r.ok && data.ok) {
+      await loadBacklog();
+    } else {
+      btn.disabled = false;
+      btn.textContent = 'Queue';
+      const msg = 'Queue failed: ' + (data.error || 'unknown error');
+      if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; }
+    }
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = 'Queue';
+    const msg = 'Queue failed: ' + (e instanceof Error ? e.message : String(e));
+    if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; }
+  }
+}
+
+async function unqueueBacklogEntry(id, btn) {
+  const card = btn.closest('[data-backlog-id]');
+  const errEl = card ? card.querySelector('.backlog-card-error') : null;
+  if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+  btn.disabled = true;
+  try {
+    const r = await fetch(API + `/api/backlog/${id}/queue`, { method: 'DELETE' });
+    const data = await r.json();
+    if (r.ok && data.ok) {
+      await loadBacklog();
+    } else {
+      btn.disabled = false;
+      const msg = 'Unqueue failed: ' + (data.error || 'unknown error');
+      if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; }
+    }
+  } catch (e) {
+    btn.disabled = false;
+    const msg = 'Unqueue failed: ' + (e instanceof Error ? e.message : String(e));
     if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; }
   }
 }
