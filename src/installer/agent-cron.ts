@@ -246,6 +246,9 @@ export async function ensureWorkflowCrons(workflow: WorkflowSpec): Promise<void>
  * Only removes if no other active runs exist for this workflow.
  */
 export async function teardownWorkflowCronsIfIdle(workflowId: string): Promise<void> {
+  // No-op in test environments
+  if (process.env.ANTFARM_SKIP_CRON === '1') return;
+
   const active = countActiveRuns(workflowId);
   if (active > 0) return;
   await removeAgentCrons(workflowId);
