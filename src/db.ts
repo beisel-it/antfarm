@@ -68,6 +68,8 @@ function migrate(db: DatabaseSync): void {
       output TEXT,
       retry_count INTEGER DEFAULT 0,
       max_retries INTEGER DEFAULT 2,
+      claimed_at TEXT,
+      finished_at TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -150,6 +152,16 @@ function migrate(db: DatabaseSync): void {
   }
   if (!colNames.has("finished_at")) {
     db.exec("ALTER TABLE steps ADD COLUMN finished_at TEXT");
+  }
+
+  // Add columns to stories table for backwards compat
+  const storyCols = db.prepare("PRAGMA table_info(stories)").all() as Array<{ name: string }>;
+  const storyColNames = new Set(storyCols.map((c) => c.name));
+  if (!storyColNames.has("claimed_at")) {
+    db.exec("ALTER TABLE stories ADD COLUMN claimed_at TEXT");
+  }
+  if (!storyColNames.has("finished_at")) {
+    db.exec("ALTER TABLE stories ADD COLUMN finished_at TEXT");
   }
 
   // Add columns to runs table for backwards compat
