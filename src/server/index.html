@@ -1329,10 +1329,49 @@ function esc(s) { if (!s) return ''; return s.replace(/&/g,'&amp;').replace(/</g
 // Normalize SQLite datetime('now') format (no T/Z) to proper ISO 8601 UTC
 function parseTS(ts) { if (!ts) return null; if (!ts.endsWith('Z') && !ts.includes('+')) ts = ts.replace(' ', 'T') + 'Z'; return new Date(ts); }
 
+function saveOpenStates(panel) {
+  const openIds = new Set();
+  if (!panel) return openIds;
+  panel.querySelectorAll('.step-row[data-step-id]').forEach(row => {
+    const stepId = row.getAttribute('data-step-id');
+    const details = row.querySelector('.step-details');
+    const innerDetails = row.querySelector('details');
+    if (stepId && (details?.classList.contains('step-open') || innerDetails?.open)) {
+      openIds.add(stepId);
+    }
+  });
+  return openIds;
+}
+function restoreOpenStates(panel, openIds) {
+  if (!panel || !openIds || openIds.size === 0) return;
+  panel.querySelectorAll('.step-row[data-step-id]').forEach(row => {
+    const stepId = row.getAttribute('data-step-id');
+    if (stepId && openIds.has(stepId)) {
+      const details = row.querySelector('.step-details');
+      const chevron = row.querySelector('.step-chevron');
+      const innerDetails = row.querySelector('details');
+      if (details) details.classList.add('step-open');
+      if (chevron) chevron.classList.add('step-chevron-open');
+      if (innerDetails) innerDetails.open = true;
+    }
+  });
+}
+function saveScroll(panel) {
+  return panel ? panel.scrollTop : 0;
+}
+function restoreScroll(panel, top) {
+  if (panel) panel.scrollTop = top;
+}
+
 async function openRun(id) {
+  const panel = document.getElementById('panel');
+  const openIds = saveOpenStates(panel);
+  const scrollTop = saveScroll(panel);
   const run = await fetchJSON(`/api/runs/${id}`);
   const stories = await fetchJSON(`/api/runs/${id}/stories`).catch(() => []);
   renderRunPanel(run, stories || []);
+  restoreOpenStates(panel, openIds);
+  restoreScroll(panel, scrollTop);
   await Promise.all([loadStories(id), loadActivity(id)]);
   openRunId = id;
   document.getElementById('overlay').classList.add('open');
@@ -1343,12 +1382,14 @@ async function refreshOpenRunPanel() {
   if (!openRunId) return;
   try {
     const panel = document.getElementById('panel');
-    const scrollTop = panel ? panel.scrollTop : 0;
+    const openIds = saveOpenStates(panel);
+    const scrollTop = saveScroll(panel);
     if (panel) panel.style.opacity = '0.85';
     const run = await fetchJSON(`/api/runs/${openRunId}`);
     const stories = await fetchJSON(`/api/runs/${openRunId}/stories`).catch(() => []);
     renderRunPanel(run, stories || []);
-    if (panel) panel.scrollTop = scrollTop;
+    restoreOpenStates(panel, openIds);
+    restoreScroll(panel, scrollTop);
     if (panel) panel.style.opacity = '1';
     await Promise.all([loadStories(openRunId), loadActivity(openRunId)]);
   } catch {
@@ -1424,16 +1465,6 @@ function renderRunPanel(run, stories) {
     parts.push('</div></div>');
   }
   const stepsHTML = parts.join('');
-  // Save open step IDs before replacing innerHTML
-  const openStepIds = new Set();
-  panel.querySelectorAll('.step-row[data-step-id]').forEach(row => {
-    const stepId = row.getAttribute('data-step-id');
-    const details = row.querySelector('.step-details');
-    const innerDetails = row.querySelector('details');
-    if (stepId && (details?.classList.contains('step-open') || innerDetails?.open)) {
-      openStepIds.add(stepId);
-    }
-  });
   panel.innerHTML = `
     <button class="panel-close" onclick="closePanel()">✕</button>
     <h2>${run.workflow_id}</h2>
@@ -1447,20 +1478,6 @@ function renderRunPanel(run, stories) {
       <div id="stories-panel"></div>
     <div id="activity-panel"></div>
   `;
-  // Restore open state for previously open steps
-  if (openStepIds.size > 0) {
-    panel.querySelectorAll('.step-row[data-step-id]').forEach(row => {
-      const stepId = row.getAttribute('data-step-id');
-      if (stepId && openStepIds.has(stepId)) {
-        const details = row.querySelector('.step-details');
-        const chevron = row.querySelector('.step-chevron');
-        const innerDetails = row.querySelector('details');
-        if (details) details.classList.add('step-open');
-        if (chevron) chevron.classList.add('step-chevron-open');
-        if (innerDetails) innerDetails.open = true;
-      }
-    });
-  }
 }
 
 function formatEventDesc(evt) {
