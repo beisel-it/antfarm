@@ -150,7 +150,7 @@ select:focus{outline:none;border-color:#8ECFC0}
 /* ── Overlay / Panel ───────────────────────────────────────────── */
 .overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:var(--overlay);z-index:100;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .15s}
 .overlay.open{opacity:1;pointer-events:auto}
-.panel{background:var(--bg-surface);border:1px solid var(--border);border-radius:12px;width:90%;max-width:640px;max-height:85vh;overflow-y:auto;padding:24px;position:relative;box-shadow:0 8px 32px var(--shadow-heavy)}
+.panel{background:var(--bg-surface);border:1px solid var(--border);border-radius:12px;width:90%;max-width:640px;max-height:85vh;overflow-y:auto;padding:24px;position:relative;box-shadow:0 8px 32px var(--shadow-heavy);transition:opacity 0.1s ease}
 .panel-close{position:absolute;top:12px;right:16px;background:none;border:none;color:var(--text-secondary);font-size:20px;cursor:pointer;padding:4px 8px;border-radius:4px}
 .panel-close:hover{color:var(--text-primary);background:var(--bg-column-header)}
 .panel h2{font-size:16px;font-weight:600;color:var(--text-primary);margin-bottom:4px;padding-right:40px}
@@ -1344,10 +1344,12 @@ async function refreshOpenRunPanel() {
   try {
     const panel = document.getElementById('panel');
     const scrollTop = panel ? panel.scrollTop : 0;
+    if (panel) panel.style.opacity = '0.85';
     const run = await fetchJSON(`/api/runs/${openRunId}`);
     const stories = await fetchJSON(`/api/runs/${openRunId}/stories`).catch(() => []);
     renderRunPanel(run, stories || []);
     if (panel) panel.scrollTop = scrollTop;
+    if (panel) panel.style.opacity = '1';
     await Promise.all([loadStories(openRunId), loadActivity(openRunId)]);
   } catch {
     closePanel();
