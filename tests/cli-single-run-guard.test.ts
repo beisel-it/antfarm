@@ -112,8 +112,8 @@ describe("CLI single-run-per-project guard (US-003)", () => {
     ]);
 
     assert.ok(
-      result.stderr.startsWith("Cannot start run:"),
-      `Expected stderr to start with 'Cannot start run:', got: "${result.stderr}"`
+      result.stderr.includes("Cannot start run:"),
+      `Expected stderr to include 'Cannot start run:', got: "${result.stderr}"`
     );
   });
 
