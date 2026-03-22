@@ -529,7 +529,7 @@ function startOpenRunRefresh() {
   clearOpenRunRefresh();
   openRunRefreshInterval = setInterval(() => {
     void refreshOpenRunPanel();
-  }, 5000);
+  }, GLOBAL_REFRESH_MS);
 }
 
 async function fetchJSON(url) {
