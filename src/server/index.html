@@ -470,6 +470,7 @@ select:focus{outline:none;border-color:#8ECFC0}
 
 <script>
 const API = '';
+const GLOBAL_REFRESH_MS = 30000;
 let workflows = [];
 let currentWf = null;
 let openRunId = null;
@@ -1575,6 +1576,7 @@ async function loadStories(runId) {
 
 document.getElementById('wf-select').addEventListener('change', e => selectWorkflow(e.target.value));
 initStatusFilterButtons();
+document.getElementById('refresh-note').textContent = `Auto-refresh: ${Math.floor(GLOBAL_REFRESH_MS / 1000)}s`;
 loadWorkflows();
 loadProjects().then(() => {
   if (!currentWf) document.getElementById('board').innerHTML = '<div class="empty" style="margin:auto">Select a workflow</div>';
@@ -1586,12 +1588,12 @@ setInterval(() => {
       if (!currentWf) document.getElementById('board').innerHTML = '<div class="empty" style="margin:auto">Select a workflow</div>';
     });
   }
-}, 30000);
+}, GLOBAL_REFRESH_MS);
 
 setInterval(() => {
   const el = document.getElementById('next-refresh');
   if (!el) return;
-  const remaining = 30 - Math.floor((Date.now() - lastRefreshTime) / 1000);
+  const remaining = Math.floor(GLOBAL_REFRESH_MS / 1000) - Math.floor((Date.now() - lastRefreshTime) / 1000);
   if (remaining <= 0) {
     el.textContent = 'Refreshing...';
   } else {

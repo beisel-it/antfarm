@@ -559,15 +559,15 @@ describe("US-006: Integration tests for status bar structure and behaviour", () 
   // --- Countdown arithmetic test ---
 
   it("countdown logic: given lastRefreshTime = now - 10000, remaining should be 20", () => {
-    // Verify the formula is present in the source
+    // Verify the formula is present in the source (uses GLOBAL_REFRESH_MS after US-001 refactor)
     assert.ok(
-      html.includes("30 - Math.floor((Date.now() - lastRefreshTime) / 1000)"),
-      "Expected countdown formula '30 - Math.floor((Date.now() - lastRefreshTime) / 1000)' in script"
+      html.includes("Math.floor(GLOBAL_REFRESH_MS / 1000) - Math.floor((Date.now() - lastRefreshTime) / 1000)"),
+      "Expected countdown formula using GLOBAL_REFRESH_MS in script"
     );
     // Simulate the formula: 10 seconds elapsed → remaining = 30 - 10 = 20
-    const interval = 30;
+    const GLOBAL_REFRESH_MS = 30000;
     const lastRefreshTime = Date.now() - 10000;
-    const remaining = interval - Math.floor((Date.now() - lastRefreshTime) / 1000);
+    const remaining = Math.floor(GLOBAL_REFRESH_MS / 1000) - Math.floor((Date.now() - lastRefreshTime) / 1000);
     // remaining should be approximately 20 (allow ±1 for timing jitter)
     assert.ok(
       remaining >= 19 && remaining <= 21,
@@ -617,10 +617,10 @@ describe("US-006: Integration tests for status bar structure and behaviour", () 
     assert.ok(distHtml.includes('id="next-refresh"'), "dist: #next-refresh should exist");
   });
 
-  it("dist: countdown formula uses 30s interval", () => {
+  it("dist: countdown formula uses GLOBAL_REFRESH_MS", () => {
     assert.ok(
-      distHtml.includes("30 - Math.floor((Date.now() - lastRefreshTime) / 1000)"),
-      "Expected countdown formula in dist/server/index.html"
+      distHtml.includes("Math.floor(GLOBAL_REFRESH_MS / 1000) - Math.floor((Date.now() - lastRefreshTime) / 1000)"),
+      "Expected countdown formula using GLOBAL_REFRESH_MS in dist/server/index.html"
     );
   });
 });
