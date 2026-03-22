@@ -10,6 +10,8 @@ import {
   updateBacklogEntry,
   deleteBacklogEntry,
   getBacklogEntry,
+  queueBacklogEntry,
+  cancelQueuedEntry,
 } from "../backlog/index.js";
 import {
   listProjects,
@@ -299,6 +301,48 @@ export function startDashboard(port = 3333, deps: DashboardDeps = {}): http.Serv
           return json(res, { error: message }, 400);
         }
       });
+    }
+
+    const backlogQueueMatch = p.match(/^\/api\/backlog\/([^/]+)\/queue$/);
+    if (backlogQueueMatch && req.method === "POST") {
+      const id = backlogQueueMatch[1];
+      const entry = findBacklogEntryById(id);
+      if (!entry) return json(res, { error: "not found" }, 404);
+      if (entry.status === "dispatched") return json(res, { error: "already dispatched" }, 409);
+      if (!entry.project_id) return json(res, { error: "entry has no project — queue requires a project" }, 400);
+      return readBody(req, (body) => {
+        try {
+          let workflowId: string | undefined;
+          try {
+            const data = body ? JSON.parse(body) : {};
+            workflowId = data.workflowId;
+          } catch {
+            // ignore parse errors — body is optional
+          }
+
+          // Priority: body workflowId → entry.workflow_id → first installed workflow
+          if (!workflowId && entry.workflow_id) workflowId = entry.workflow_id;
+          if (!workflowId) {
+            const workflows = loadWorkflows();
+            if (workflows.length > 0) workflowId = workflows[0].id;
+          }
+          if (!workflowId) return json(res, { error: "no workflows installed" }, 400);
+
+          const queued = queueBacklogEntry(entry.id, { workflowId });
+          return json(res, { ok: true, queueOrder: queued.queue_order });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          return json(res, { error: message }, 400);
+        }
+      });
+    }
+
+    if (backlogQueueMatch && req.method === "DELETE") {
+      const id = backlogQueueMatch[1];
+      const entry = findBacklogEntryById(id);
+      if (!entry) return json(res, { error: "not found" }, 404);
+      cancelQueuedEntry(entry.id);
+      return json(res, { ok: true });
     }
 
     const backlogIdMatch = p.match(/^\/api\/backlog\/([^/]+)$/);
