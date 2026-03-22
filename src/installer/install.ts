@@ -261,6 +261,7 @@ function upsertAgent(
     agentDir: agent.agentDir,
     tools: buildToolsConfig(agent.role),
     subagents: SUBAGENT_POLICY,
+    heartbeat: { every: "0m" },
   };
   if (agent.model) payload.model = agent.model;
   // Note: timeoutSeconds is NOT written to the agent config entry because
