@@ -31,7 +31,7 @@ export function addBacklogEntry(fields: {
 
 export function updateBacklogEntry(
   id: string,
-  updates: Partial<Pick<BacklogEntry, "title" | "description" | "status" | "priority" | "run_id" | "project_id" | "workflow_id" | "notes" | "tags" | "acceptance_criteria">>
+  updates: Partial<Pick<BacklogEntry, "title" | "description" | "status" | "priority" | "run_id" | "project_id" | "workflow_id" | "notes" | "tags" | "acceptance_criteria" | "queue_order">>
 ): BacklogEntry | null {
   const db = getDb();
   const existing = getBacklogEntry(id);
@@ -81,6 +81,10 @@ export function updateBacklogEntry(
     setClauses.push("acceptance_criteria = ?");
     values.push(updates.acceptance_criteria);
   }
+  if (updates.queue_order !== undefined) {
+    setClauses.push("queue_order = ?");
+    values.push(updates.queue_order);
+  }
 
   if (setClauses.length === 0) return existing;
 
@@ -101,7 +105,7 @@ export function deleteBacklogEntry(id: string): boolean {
 
 export function listBacklogEntries(filters?: { workflow_id?: string; project_id?: string }): BacklogEntry[] {
   const db = getDb();
-  const SELECT = "SELECT id, title, description, status, priority, run_id, project_id, workflow_id, notes, tags, acceptance_criteria, created_at, updated_at FROM backlog";
+  const SELECT = "SELECT id, title, description, status, priority, run_id, project_id, workflow_id, notes, tags, acceptance_criteria, queue_order, created_at, updated_at FROM backlog";
   const ORDER = "ORDER BY priority DESC, created_at ASC";
 
   if (filters?.workflow_id && filters?.project_id) {
@@ -129,7 +133,7 @@ export function getBacklogEntry(id: string): BacklogEntry | null {
   const db = getDb();
   const row = db
     .prepare(
-      "SELECT id, title, description, status, priority, run_id, project_id, workflow_id, notes, tags, acceptance_criteria, created_at, updated_at FROM backlog WHERE id = ?"
+      "SELECT id, title, description, status, priority, run_id, project_id, workflow_id, notes, tags, acceptance_criteria, queue_order, created_at, updated_at FROM backlog WHERE id = ?"
     )
     .get(id) as unknown as BacklogEntry | undefined;
   return row ?? null;
@@ -139,7 +143,57 @@ export function listBacklogEntriesForProject(projectId: string): BacklogEntry[] 
   const db = getDb();
   return db
     .prepare(
-      "SELECT id, title, description, status, priority, run_id, project_id, workflow_id, notes, tags, acceptance_criteria, created_at, updated_at FROM backlog WHERE project_id = ? ORDER BY priority DESC, created_at ASC"
+      "SELECT id, title, description, status, priority, run_id, project_id, workflow_id, notes, tags, acceptance_criteria, queue_order, created_at, updated_at FROM backlog WHERE project_id = ? ORDER BY priority DESC, created_at ASC"
     )
     .all(projectId) as unknown as BacklogEntry[];
+}
+
+export function queueBacklogEntry(id: string, opts: { workflowId: string }): BacklogEntry {
+  const db = getDb();
+  const entry = getBacklogEntry(id);
+  if (!entry) {
+    throw new Error(`Backlog entry not found: ${id}`);
+  }
+  if (entry.status === 'dispatched') {
+    throw new Error(`Backlog entry is already dispatched and cannot be queued: ${id}`);
+  }
+
+  // Calculate next queue_order for the same project+workflow combination
+  const maxRow = db
+    .prepare(
+      "SELECT MAX(queue_order) AS max_order FROM backlog WHERE project_id = ? AND workflow_id = ? AND status = 'queued'"
+    )
+    .get(entry.project_id, opts.workflowId) as { max_order: number | null } | undefined;
+
+  const nextOrder = (maxRow?.max_order ?? 0) + 1;
+  const now = new Date().toISOString();
+
+  db.prepare(
+    "UPDATE backlog SET status = 'queued', queue_order = ?, workflow_id = ?, updated_at = ? WHERE id = ?"
+  ).run(nextOrder, opts.workflowId, now, id);
+
+  return getBacklogEntry(id)!;
+}
+
+export function getNextQueuedEntry(projectId: string, workflowId: string): BacklogEntry | null {
+  const db = getDb();
+  const row = db
+    .prepare(
+      "SELECT id, title, description, status, priority, run_id, project_id, workflow_id, notes, tags, acceptance_criteria, queue_order, created_at, updated_at FROM backlog WHERE project_id = ? AND workflow_id = ? AND status = 'queued' ORDER BY queue_order ASC, created_at ASC LIMIT 1"
+    )
+    .get(projectId, workflowId) as unknown as BacklogEntry | undefined;
+  return row ?? null;
+}
+
+export function cancelQueuedEntry(id: string): BacklogEntry | null {
+  const db = getDb();
+  const entry = getBacklogEntry(id);
+  if (!entry) return null;
+
+  const now = new Date().toISOString();
+  db.prepare(
+    "UPDATE backlog SET status = 'pending', queue_order = NULL, updated_at = ? WHERE id = ?"
+  ).run(now, id);
+
+  return getBacklogEntry(id);
 }

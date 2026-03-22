@@ -14,7 +14,9 @@ import { loadWorkflowSpec } from "./workflow-spec.js";
 import { resolveWorkflowDir } from "./paths.js";
 import { isFrontendChange } from "../lib/frontend-detect.js";
 import type { WorkflowStepFailure } from "./types.js";
-import { deleteBacklogEntry } from "../backlog/ops.js";
+import { deleteBacklogEntry, getNextQueuedEntry } from "../backlog/index.js";
+import { runWorkflow } from "./run.js";
+import { updateBacklogEntry } from "../backlog/index.js";
 
 /**
  * Parse KEY: value lines from step output with support for multi-line values.
@@ -1084,6 +1086,26 @@ function advancePipeline(runId: string): { advanced: boolean; runCompleted: bool
       }
     } catch (err) {
       logger.warn(`Failed to delete backlog entry for completed run: ${String(err)}`, { runId });
+    }
+    // Auto-dispatch next queued backlog entry if one exists for this project+workflow
+    const completedRun = db.prepare("SELECT project_id, workflow_id FROM runs WHERE id = ?").get(runId) as { project_id: string | null; workflow_id: string } | undefined;
+    if (completedRun?.project_id) {
+      const projectId = completedRun.project_id;
+      const workflowId = completedRun.workflow_id;
+      const nextQueued = getNextQueuedEntry(projectId, workflowId);
+      if (nextQueued) {
+        const backlogId = nextQueued.id;
+        runWorkflow({
+          workflowId,
+          taskTitle: nextQueued.title,
+          projectId,
+        }).then((newRun) => {
+          updateBacklogEntry(backlogId, { status: "dispatched", run_id: newRun.id, queue_order: null });
+          logger.info("Auto-dispatched queued backlog entry", { runId: newRun.id });
+        }).catch((err: unknown) => {
+          logger.warn(`Auto-dispatch of queued backlog entry failed (non-fatal): ${String(err)}`, { runId });
+        });
+      }
     }
     archiveRunProgress(runId);
     scheduleRunCronTeardown(runId);

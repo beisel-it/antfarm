@@ -1,0 +1,938 @@
+# Antfarm — LLM Reference
+
+This file is the single authoritative reference for operating Antfarm. It is optimized for
+LLM context ingestion. Read this file to understand how to run, monitor, debug, and extend
+Antfarm workflows without needing to read the source code.
+
+---
+
+## 1. What Antfarm Is
+
+Antfarm is a multi-agent workflow orchestration system built on SQLite + cron jobs. It runs
+teams of specialized AI agents that execute structured pipelines without a central orchestrator.
+
+**Key properties:**
+- No central orchestrator — each agent polls independently for work
+- Deterministic — same workflow, same steps, same order, every time
+- Fresh session per step — each agent gets a clean context window
+- Story-based loops — planners decompose tasks; loop steps iterate over stories
+- Automatic retry and escalation — retries on failure, escalates to human when exhausted
+- Zero infrastructure — SQLite + cron, no Redis/Kafka/Docker required
+
+**Persistence:**
+- DB: `~/.openclaw/antfarm/antfarm.db` (SQLite, WAL mode)
+- Events log: `~/.openclaw/antfarm/events.jsonl` (JSONL, 10MB rotation)
+- Workflow definitions: `~/.openclaw/antfarm/workflows/<workflow-id>/workflow.yml`
+- Agent workspaces: `~/.openclaw/workspaces/workflows/<workflow-id>/<agent-id>/`
+- OpenClaw config: `~/.openclaw/openclaw.json` (agent registry)
+
+---
+
+## 2. Core Concepts
+
+### Runs
+A run is one execution of a workflow for a specific task.
+
+| Field | Description |
+|-------|-------------|
+| `id` | UUID |
+| `run_number` | Auto-assigned sequential integer |
+| `workflow_id` | Which workflow (e.g., `feature-dev`) |
+| `task` | The task string passed to `workflow run` |
+| `status` | `running` \| `paused` \| `blocked` \| `done` \| `failed` \| `cancelled` |
+| `context` | JSON object — accumulated KEY: value pairs from all steps |
+
+### Steps
+Steps are the individual pipeline stages within a run.
+
+| Field | Description |
+|-------|-------------|
+| `id` | UUID |
+| `run_id` | Parent run |
+| `step_id` | Step name from workflow.yml (e.g., `plan`, `implement`) |
+| `agent_id` | Fully-qualified agent ID (e.g., `feature-dev_developer`) |
+| `step_index` | Ordering within the pipeline (0-based) |
+| `type` | `single` or `loop` |
+| `status` | `waiting` \| `pending` \| `running` \| `done` \| `failed` \| `skipped` |
+| `input_template` | Template string with `{{placeholders}}` |
+| `expects` | String the output must contain (e.g., `"STATUS: done"`) |
+| `output` | Last output from the agent (null if not yet run) |
+| `retry_count` | How many times this step has failed |
+| `max_retries` | Max failures before escalation (default: 2) |
+| `abandoned_count` | How many times Medic auto-reset this step |
+| `claimed_at` | ISO timestamp when agent claimed it (set on → running) |
+| `finished_at` | ISO timestamp when it completed (set on → done or failed) |
+| `session_key` | UUID identifying the agent session that claimed this step |
+
+**Step status flow:**
+```
+waiting → pending → running → done
+                 ↘ failed (retry_count < max_retries → reset to pending)
+                 ↘ failed (retry_count >= max_retries → escalate or stop)
+                 ↘ skipped
+```
+
+### Stories
+Stories are user stories produced by a planner step for loop steps to iterate over.
+
+| Field | Description |
+|-------|-------------|
+| `id` | UUID |
+| `run_id` | Parent run |
+| `story_id` | User-defined ID (e.g., `S-1`, `fix-001`) |
+| `story_index` | Order within the run |
+| `title` | Short description |
+| `description` | What needs to be done |
+| `acceptance_criteria` | JSON array of verifiable criteria strings |
+| `status` | `pending` \| `running` \| `done` \| `failed` |
+| `retry_count` | Per-story retry count |
+| `max_retries` | Per-story retry limit (default: 2) |
+| `claimed_at` | ISO timestamp when claimed |
+| `finished_at` | ISO timestamp when done or failed |
+
+**Story status flow:**
+```
+pending → running (claimed_at set) → done (finished_at set)
+                                   ↘ failed (retry if retry_count < max_retries)
+```
+
+Maximum 20 stories per run.
+
+### Agents
+Agents are defined in workflow.yml and provisioned as OpenClaw agent workspaces.
+
+**Agent ID format:** `{workflow_id}_{agent_id}` (e.g., `feature-dev_developer`)
+
+**Cron job naming:** `antfarm/{workflow-id}/{agent-id}`
+
+**Polling interval:** 5 minutes (default). Crons are created per-agent when a workflow run starts.
+
+**Polling sequence:**
+1. `antfarm step peek <agent-id>` → `HAS_WORK` or `NO_WORK`
+2. If `HAS_WORK`: `antfarm step claim <agent-id>` → resolved JSON with step input
+3. Agent does the work
+4. `antfarm step complete <step-id>` (stdin: output text) or `antfarm step fail <step-id> <error>`
+
+### Agent Roles (Tool Access)
+
+| Role | Read | Write | Exec | Browser/Web | Notes |
+|------|------|-------|------|-------------|-------|
+| `analysis` | yes | no | no | no | Planner, reviewer, investigator |
+| `coding` | yes | yes | yes | no | Developer, fixer, setup |
+| `verification` | yes | no | yes | no | Verifier — no write to prevent corruption |
+| `testing` | yes | no | yes | yes | Tester — browser for E2E |
+| `pr` | yes | no | yes | no | PR creation only |
+| `scanning` | yes | no | yes | yes (web) | CVE lookups |
+
+Default timeout: 30 minutes per agent session. Override with `timeoutSeconds` in agent definition.
+
+---
+
+## 3. Context Passing
+
+Context flows between steps via KEY: value pairs in agent output.
+
+**Output format:**
+```
+STATUS: done
+REPO: /path/to/repo
+BRANCH: feature/my-thing
+BUILD_CMD: npm run build
+```
+
+**Rules:**
+- Keys must match `[A-Z_]+` (uppercase letters and underscores)
+- Keys become lowercase template variables (e.g., `REPO` → `{{repo}}`)
+- Values can span multiple lines (continuation until next `KEY:` line)
+- `STORIES_JSON` is special — parsed separately and not stored as a context variable
+- Missing `{{placeholder}}` values render as `[missing: key]` (not an error)
+
+**Always-available variables:**
+| Variable | Description |
+|----------|-------------|
+| `{{task}}` | Original task string from `workflow run` |
+| `{{run_id}}` | Current run UUID |
+
+**Loop-only variables:**
+| Variable | Description |
+|----------|-------------|
+| `{{current_story}}` | Full story: title, description, acceptance criteria |
+| `{{current_story_id}}` | Story ID (e.g., `S-1`) |
+| `{{current_story_title}}` | Story title only |
+| `{{completed_stories}}` | Bullet list of done stories |
+| `{{stories_remaining}}` | Count of pending/running stories |
+| `{{progress}}` | Contents of `progress-{run_id}.txt` from agent workspace |
+| `{{verify_feedback}}` | Feedback from a failed verify step (empty if not retrying) |
+| `{{has_frontend_changes}}` | `true` / `false` based on frontend file detection |
+
+---
+
+## 4. Workflow YAML Spec
+
+### Top-Level Structure
+
+```yaml
+id: my-workflow           # Unique ID (lowercase, hyphens)
+name: My Workflow         # Display name
+version: 1                # Integer
+description: |            # Multi-line description
+  What this workflow does.
+
+polling:
+  model: default          # Model for polling crons (default = OpenClaw default)
+  timeoutSeconds: 120     # Polling session timeout
+
+agents:
+  - id: my-agent          # Unique within workflow
+    name: My Agent
+    role: coding          # analysis | coding | verification | testing | pr | scanning
+    description: What it does.
+    timeoutSeconds: 1800  # Override default role timeout (seconds)
+    workspace:
+      baseDir: agents/my-agent
+      files:
+        AGENTS.md: agents/my-agent/AGENTS.md
+        SOUL.md: agents/my-agent/SOUL.md
+        IDENTITY.md: agents/my-agent/IDENTITY.md
+      skills:             # Optional: skills to install
+        - antfarm-workflows
+        - agent-browser
+
+steps:
+  - id: step-name
+    agent: agent-id
+    input: |
+      Template with {{task}} and {{prev_key}}.
+      Reply with:
+      STATUS: done
+      MY_KEY: value
+    expects: "STATUS: done"   # Required keys in output (comma-separated)
+    max_retries: 2
+    on_fail:
+      escalate_to: human      # OR retry_step / on_exhausted
+```
+
+### Step Types
+
+**Single step (default):**
+```yaml
+- id: plan
+  agent: planner
+  input: |
+    Plan the work. Reply STATUS: done.
+  expects: "STATUS: done"
+```
+
+**Loop step:**
+```yaml
+- id: implement
+  agent: developer
+  type: loop
+  loop:
+    over: stories           # Only supported value
+    completion: all_done    # Only supported value
+    fresh_session: true     # Fresh agent session per story
+    verify_each: true       # Run verify_step after each story
+    verify_step: verify     # Step ID to use for per-story verification
+  input: |
+    Implement: {{current_story}}
+    Reply STATUS: done
+  expects: "STATUS: done"
+  max_retries: 2
+```
+
+### on_fail Options
+
+```yaml
+on_fail:
+  escalate_to: human          # Notify human, pause run
+
+on_fail:
+  retry_step: implement       # Re-run this step with {{verify_feedback}}
+  max_retries: 3
+  on_exhausted:
+    escalate_to: human
+
+# Note: retry_step is for verify steps that loop back to implement.
+# The ISSUES: key in verifier output becomes {{verify_feedback}} in the implement step.
+```
+
+### expects Format
+
+`expects` specifies which keys must be present in the output. The string is
+comma-separated KEY: value pairs (only the KEY part is checked):
+
+```yaml
+expects: "STATUS: done"                    # Must contain STATUS key with value "done"
+expects: "STATUS: done, REPO: ., PR: ."   # Must contain STATUS, REPO, PR keys
+```
+
+### STORIES_JSON
+
+A planner step creates stories by including `STORIES_JSON:` in output:
+
+```
+STATUS: done
+REPO: /path/to/repo
+STORIES_JSON: [
+  {
+    "id": "S-1",
+    "title": "Create database schema",
+    "description": "Add users table with email, password_hash, created_at columns.",
+    "acceptanceCriteria": [
+      "Migration file exists",
+      "Schema includes all required columns",
+      "Typecheck passes"
+    ]
+  }
+]
+```
+
+Required story fields: `id`, `title`, `description`, `acceptanceCriteria` (array of strings).
+Also accepts: `acceptance_criteria` (snake_case alias). Max 20 stories per run.
+
+### Shared Agents
+
+Antfarm includes shared agents in `agents/shared/`:
+- `agents/shared/setup/` — Creates branches, establishes build/test baselines
+- `agents/shared/verifier/` — Verifies work against acceptance criteria
+- `agents/shared/pr/` (if present) — Creates pull requests
+
+Reference from workflow:
+```yaml
+workspace:
+  files:
+    AGENTS.md: ../../agents/shared/setup/AGENTS.md
+    SOUL.md: ../../agents/shared/setup/SOUL.md
+    IDENTITY.md: ../../agents/shared/setup/IDENTITY.md
+```
+
+---
+
+## 5. CLI Reference
+
+All commands run as: `antfarm <command> [args]`
+
+### Lifecycle
+
+```
+antfarm install
+  Install all bundled workflows + register agents + set up crons.
+
+antfarm uninstall [--force]
+  Full teardown: remove agents, crons, optionally delete DB.
+  --force  Skip active-run check and wipe DB.
+```
+
+### Workflow Commands
+
+```
+antfarm workflow list
+  List installed workflows.
+
+antfarm workflow install <id>
+  Install a single workflow (provision agents, set up crons).
+
+antfarm workflow uninstall <id> [--force]
+  Remove a workflow and its agents/crons.
+  --all    Remove all installed workflows.
+  --force  Skip active-run check.
+
+antfarm workflow run <id> <task>
+  Start a new run. Outputs run ID, workflow, status.
+  Example: antfarm workflow run feature-dev "Add OAuth login"
+
+antfarm workflow run <id> <task> --dry-run
+  Validate workflow spec without creating DB entries.
+
+antfarm workflow status <query>
+  Check run status. Query can be:
+    - Task substring (e.g., "OAuth")
+    - Run ID prefix (e.g., "a1fdf5")
+    - Run number with # prefix (e.g., "#42")
+  Shows step list with status, story progress for loop steps, timing.
+
+antfarm workflow runs
+  List all runs (all statuses) with run number, workflow, task, status.
+
+antfarm workflow resume <run-id>
+  Resume a failed run from the failed step. Resets failed step to pending.
+
+antfarm workflow stop <run-id>
+  Cancel a run. Sets run to cancelled, all non-terminal steps to failed.
+
+antfarm workflow ensure-crons <id>
+  Recreate cron jobs for a workflow (use if crons were accidentally deleted).
+```
+
+### Step Commands (Agent-Facing)
+
+These are called by agents inside their cron sessions, not by users directly.
+
+```
+antfarm step peek <agent-id>
+  Check if agent has pending work. Output: HAS_WORK or NO_WORK
+  Fast — single COUNT query. Safe to call frequently.
+
+antfarm step claim <agent-id>
+  Claim the next pending step. Output: JSON object:
+  {
+    "stepId": "<uuid>",
+    "runId": "<uuid>",
+    "stepType": "single" | "loop",
+    "input": "<fully resolved prompt with all {{variables}} filled in>",
+    "sessionKey": "<uuid>"
+  }
+  Returns exit code 1 if no work available.
+
+antfarm step complete <step-id>
+  Mark step done. Read output from stdin:
+  echo "STATUS: done\nMY_KEY: value" | antfarm step complete <step-id>
+
+antfarm step fail <step-id> <error-message>
+  Mark step failed. Triggers retry logic (resets to pending if retries remain).
+  If retries exhausted, escalates based on on_fail config.
+
+antfarm step stories <run-id>
+  List all stories for a run with status, retry count, timing.
+```
+
+### Dashboard
+
+```
+antfarm dashboard [start] [--port N]
+  Start web dashboard (default port 3333). Runs as background daemon.
+  --port N  Use port N instead of 3333.
+
+antfarm dashboard stop
+  Stop dashboard daemon.
+
+antfarm dashboard status
+  Show dashboard daemon status (running/stopped, port, PID).
+```
+
+### Backlog
+
+```
+antfarm backlog list
+  List all backlog items.
+
+antfarm backlog add <title> [options]
+  --description <text>
+  --priority <n>        Integer priority (higher = more important)
+  --project <id>        Associate with project
+  --workflow <id>       Target workflow for execution
+
+antfarm backlog update <id> [options]
+  --title <t>
+  --description <d>
+  --status <s>          pending | in_progress | done
+  --priority <n>
+  --workflow <id>
+
+antfarm backlog delete <id>
+  Delete a backlog item.
+```
+
+### Projects
+
+```
+antfarm project list [--json]
+  List all projects.
+
+antfarm project add <name> [options]
+  --git-repo-path <path>
+  --github-repo-url <url>
+
+antfarm project update <id-prefix> [options]
+  --name <n>
+  --git-repo-path <path>
+  --github-repo-url <url>
+
+antfarm project delete <id-prefix>
+  Delete project.
+
+antfarm project show <id-prefix> [--json]
+  Show project details, associated backlog items, and runs.
+```
+
+### Medic (Health Monitoring)
+
+```
+antfarm medic install
+  Install medic watchdog as an OpenClaw cron job.
+  Called automatically by antfarm install.
+
+antfarm medic uninstall
+  Remove medic cron.
+
+antfarm medic run [--json]
+  Run health check immediately. Reports findings and actions taken.
+  Use this when you suspect something is stuck.
+
+antfarm medic status
+  Show health summary: last check time, issues found, actions taken.
+
+antfarm medic log [<count>]
+  Show recent medic check history. Default: last 10 checks.
+```
+
+### Utilities
+
+```
+antfarm logs [<lines>]
+  Show recent events from events.jsonl. Default: last 50 lines.
+
+antfarm logs <run-id>
+  Show events for a specific run.
+
+antfarm version
+  Show installed version.
+
+antfarm update
+  Pull latest from GitHub, rebuild, reinstall workflows.
+```
+
+---
+
+## 6. Orchestration Patterns
+
+### Pattern 1: Linear Pipeline
+
+Simple sequential steps where each passes output to the next.
+
+```
+plan → setup → implement → pr
+```
+
+Each step's KEY: value output becomes template variables for all subsequent steps.
+
+### Pattern 2: Loop with Per-Story Verification (feature-dev pattern)
+
+```
+plan → setup → [implement ↔ verify] → test → pr → review
+```
+
+- `plan` produces `STORIES_JSON`
+- `implement` is type `loop` with `verify_each: true`, `verify_step: verify`
+- After each story, `verify` checks it; if it fails → `STATUS: retry` + `ISSUES:` → re-runs `implement` with `{{verify_feedback}}`
+- After all stories done, pipeline advances to `test`
+
+### Pattern 3: Post-Loop Verification
+
+```
+plan → implement (loop) → verify → pr
+```
+
+- `implement` loops over all stories first
+- Single `verify` step after all stories complete
+- `verify` can `STATUS: retry` → pipeline resets `implement` to retry failed stories
+
+### Pattern 4: Retry Loop to Prior Step
+
+```yaml
+- id: verify
+  on_fail:
+    retry_step: implement   # Resets implement to pending with {{verify_feedback}}
+    max_retries: 3
+    on_exhausted:
+      escalate_to: human
+```
+
+The `ISSUES:` key from the verifier's output becomes `{{verify_feedback}}` in the implement step.
+
+### Pattern 5: Escalate to Human
+
+```yaml
+on_fail:
+  escalate_to: human
+```
+
+Run status becomes `blocked`. No automatic recovery. Requires manual intervention:
+`antfarm workflow resume <run-id>` after fixing the underlying issue.
+
+---
+
+## 7. DB Schema (Operational Reference)
+
+**Location:** `~/.openclaw/antfarm/antfarm.db`
+
+**Settings:** WAL mode, `busy_timeout=5000`, `foreign_keys=ON`
+
+**Override location:** Set `ANTFARM_DB_PATH` environment variable.
+
+### runs table
+```sql
+id TEXT PRIMARY KEY          -- UUID
+workflow_id TEXT NOT NULL    -- e.g., "feature-dev"
+task TEXT NOT NULL           -- task string
+status TEXT NOT NULL         -- running|paused|blocked|done|failed|cancelled
+context TEXT NOT NULL        -- JSON: accumulated KEY:value pairs
+run_number INTEGER           -- auto-assigned sequential number
+project_id TEXT              -- optional FK to projects
+notify_url TEXT              -- optional webhook URL
+created_at TEXT NOT NULL     -- ISO timestamp
+updated_at TEXT NOT NULL     -- ISO timestamp
+```
+
+### steps table
+```sql
+id TEXT PRIMARY KEY
+run_id TEXT NOT NULL REFERENCES runs(id)
+step_id TEXT NOT NULL        -- e.g., "plan", "implement"
+agent_id TEXT NOT NULL       -- e.g., "feature-dev_developer"
+step_index INTEGER NOT NULL  -- ordering (0-based)
+type TEXT                    -- "single" | "loop"
+loop_config TEXT             -- JSON loop config
+input_template TEXT NOT NULL -- template with {{placeholders}}
+expects TEXT NOT NULL        -- required output keys
+status TEXT NOT NULL         -- waiting|pending|running|done|failed|skipped
+output TEXT                  -- last output from agent
+retry_count INTEGER          -- failures so far
+max_retries INTEGER          -- max failures before escalation
+abandoned_count INTEGER      -- times Medic auto-reset this step
+current_story_id TEXT        -- for loop steps: story currently being worked
+session_key TEXT             -- UUID of current claiming session
+claimed_at TEXT              -- ISO timestamp when claimed (NULL if unclaimed)
+finished_at TEXT             -- ISO timestamp when done/failed (NULL if unfinished)
+created_at TEXT NOT NULL
+updated_at TEXT NOT NULL
+```
+
+### stories table
+```sql
+id TEXT PRIMARY KEY
+run_id TEXT NOT NULL REFERENCES runs(id)
+story_index INTEGER NOT NULL
+story_id TEXT NOT NULL       -- e.g., "S-1"
+title TEXT NOT NULL
+description TEXT NOT NULL
+acceptance_criteria TEXT NOT NULL  -- JSON array
+status TEXT NOT NULL         -- pending|running|done|failed
+output TEXT
+retry_count INTEGER
+max_retries INTEGER
+claimed_at TEXT              -- set on → running
+finished_at TEXT             -- set on → done or failed
+created_at TEXT NOT NULL
+updated_at TEXT NOT NULL
+```
+
+### backlog table
+```sql
+id TEXT PRIMARY KEY
+title TEXT NOT NULL
+description TEXT
+workflow_id TEXT
+status TEXT                  -- pending|in_progress|done
+priority INTEGER
+project_id TEXT
+run_id TEXT                  -- run this backlog item is associated with
+created_at TEXT NOT NULL
+updated_at TEXT NOT NULL
+```
+
+### projects table
+```sql
+id TEXT PRIMARY KEY
+name TEXT NOT NULL
+git_repo_path TEXT
+github_repo_url TEXT
+created_at TEXT NOT NULL
+updated_at TEXT NOT NULL
+```
+
+### medic_checks table
+```sql
+id TEXT PRIMARY KEY
+checked_at TEXT NOT NULL
+issues_found INTEGER
+actions_taken INTEGER
+summary TEXT
+details TEXT               -- JSON
+```
+
+---
+
+## 8. Medic Health System
+
+The Medic runs periodic checks and auto-remediates safe issues.
+
+### What Medic Checks
+
+**1. Stuck Steps** (`checkStuckSteps`)
+- Finds steps in `running` status where `updated_at` is older than
+  `(maxRoleTimeoutSeconds + 5min)` threshold
+- Action: `reset_step` — resets to `pending`, increments `abandoned_count`
+- After 5 resets: marks step as `failed` permanently
+
+**2. Stalled Runs** (`checkStalledRuns`)
+- Running runs with no step progress for 2x max role timeout
+- Action: none (alert-only) — requires human decision
+- Severity: critical
+
+**3. Dead Runs** (`checkDeadRuns`)
+- Run status is `running` but all steps are in terminal states (done/failed/skipped)
+- Action: mark run `failed` (if any failed steps) or `done`
+
+**4. Orphaned Crons** (`checkOrphanedCrons`)
+- Cron jobs referencing non-existent agents or workflows
+- Action: delete the orphaned cron
+
+**5. Failing Crons** (`checkFailingCrons`)
+- Cron jobs with recent execution errors
+- Action: disable the cron (admin must investigate)
+
+### Triggering Medic
+```bash
+antfarm medic run           # Run check now
+antfarm medic run --json    # Machine-readable output
+antfarm medic status        # Last check summary
+antfarm medic log 20        # Last 20 check results
+```
+
+---
+
+## 9. Diagnosing and Unsticking Jobs
+
+### Triage Order
+
+**Step 1: Check overall status**
+```bash
+antfarm workflow runs                    # List all runs
+antfarm workflow status "<task query>"   # Status of specific run
+```
+
+**Step 2: Check events for the run**
+```bash
+antfarm logs <run-id>                    # Event stream for the run
+```
+
+**Step 3: Run Medic**
+```bash
+antfarm medic run                        # Check for stuck steps, stalled runs
+antfarm medic status                     # Summary of last check
+```
+
+**Step 4: Check story status (if loop step is running)**
+```bash
+antfarm step stories <run-id>            # Story-by-story status
+```
+
+### Stuck Step (agent crashed mid-step)
+
+Symptom: Step status = `running`, `claimed_at` is set, no progress, no `finished_at`.
+
+Fastest fix — let Medic detect and reset it (within ~5 min cron interval):
+```bash
+antfarm medic run
+```
+
+Manual reset via SQL:
+```sql
+UPDATE steps
+SET status = 'pending',
+    claimed_at = NULL,
+    abandoned_count = abandoned_count + 1,
+    updated_at = datetime('now')
+WHERE id = '<step-uuid>'
+  AND status = 'running';
+```
+
+### Stalled Run (no progress, unclear why)
+
+Symptom: Run is `running`, all steps look fine, but nothing is advancing.
+
+1. Check if crons are alive:
+```bash
+antfarm medic run   -- will flag failing/orphaned crons
+```
+
+2. Force a specific agent cron to run immediately via OpenClaw:
+   Use the OpenClaw `cron` tool with action `run` on job `antfarm/<workflow-id>/<agent-id>`
+   Example job name: `antfarm/feature-dev/developer`
+
+3. Recreate missing crons:
+```bash
+antfarm workflow ensure-crons <workflow-id>
+```
+
+### Dead Run (status=running but all steps terminal)
+
+Medic auto-detects and fixes this. To fix immediately:
+```bash
+antfarm medic run
+```
+
+Manual fix via SQL:
+```sql
+-- If any steps failed:
+UPDATE runs SET status = 'failed', updated_at = datetime('now') WHERE id = '<run-uuid>';
+-- If all steps done:
+UPDATE runs SET status = 'done', updated_at = datetime('now') WHERE id = '<run-uuid>';
+```
+
+### Failed Run (retries exhausted, escalated to human)
+
+```bash
+# Resume from the failed step
+antfarm workflow resume <run-id>
+
+# Or stop entirely
+antfarm workflow stop <run-id>
+```
+
+### Diagnostic SQL Queries
+
+```sql
+-- All currently running runs
+SELECT run_number, id, workflow_id, task, status, created_at
+FROM runs WHERE status = 'running';
+
+-- Steps in running state right now
+SELECT s.step_id, s.agent_id, s.status, s.claimed_at, s.updated_at, s.abandoned_count
+FROM steps s JOIN runs r ON r.id = s.run_id
+WHERE s.status = 'running' AND r.status = 'running'
+ORDER BY s.updated_at ASC;
+
+-- Steps that look stuck (older than 40 minutes with no update)
+SELECT s.step_id, s.agent_id, s.status, s.claimed_at, s.updated_at
+FROM steps s JOIN runs r ON r.id = s.run_id
+WHERE s.status = 'running' AND r.status = 'running'
+  AND (julianday('now') - julianday(s.updated_at)) * 1440 > 40
+ORDER BY s.updated_at ASC;
+
+-- Story status for a specific run
+SELECT story_id, title, status, retry_count, claimed_at, finished_at
+FROM stories WHERE run_id = '<run-uuid>'
+ORDER BY story_index;
+
+-- Recent events for a run
+SELECT * FROM (
+  -- events.jsonl doesn't have a DB table; use: antfarm logs <run-id>
+);
+
+-- Failed stories
+SELECT story_id, title, status, retry_count, max_retries, output
+FROM stories
+WHERE run_id = '<run-uuid>' AND status = 'failed';
+
+-- Run context (accumulated KEY: value pairs)
+SELECT json_pretty(context) FROM runs WHERE id = '<run-uuid>';
+
+-- Steps for a run ordered by pipeline position
+SELECT step_index, step_id, agent_id, type, status,
+       retry_count, max_retries, abandoned_count,
+       claimed_at, finished_at
+FROM steps WHERE run_id = '<run-uuid>'
+ORDER BY step_index;
+```
+
+### Manual DB Interventions
+
+**Only use these when CLI commands are insufficient.**
+
+Reset a stuck step to pending:
+```sql
+UPDATE steps
+SET status = 'pending', claimed_at = NULL, session_key = NULL,
+    abandoned_count = abandoned_count + 1, updated_at = datetime('now')
+WHERE id = '<step-uuid>' AND status = 'running';
+```
+
+Force fail a step:
+```sql
+UPDATE steps
+SET status = 'failed', finished_at = datetime('now'), updated_at = datetime('now')
+WHERE id = '<step-uuid>';
+```
+
+Reset a story to pending:
+```sql
+UPDATE stories
+SET status = 'pending', claimed_at = NULL,
+    retry_count = retry_count + 1, updated_at = datetime('now')
+WHERE id = '<story-uuid>' AND status IN ('running', 'failed');
+```
+
+Mark a run done or failed:
+```sql
+UPDATE runs SET status = 'done', updated_at = datetime('now') WHERE id = '<uuid>';
+UPDATE runs SET status = 'failed', updated_at = datetime('now') WHERE id = '<uuid>';
+```
+
+---
+
+## 10. Installing and Running a Workflow
+
+```bash
+# Install all bundled workflows
+antfarm install
+
+# Or install just one
+antfarm workflow install feature-dev
+
+# Run it
+antfarm workflow run feature-dev "Add OAuth login with Google"
+
+# Monitor
+antfarm workflow status "OAuth"
+antfarm dashboard          # Web UI on :3333
+
+# If something goes wrong
+antfarm medic run
+antfarm workflow resume <run-id>
+
+# Clean up a run
+antfarm workflow stop <run-id>
+```
+
+---
+
+## 11. Creating a Custom Workflow
+
+```bash
+# Create directory structure
+mkdir -p ~/.openclaw/antfarm/workflows/my-workflow/agents/{researcher,writer}
+
+# Create workflow.yml (see Section 4 for full spec)
+
+# Create agent files for each agent:
+# - AGENTS.md: instructions and output format
+# - SOUL.md: persona (brief)
+# - IDENTITY.md: name and role
+
+# Install and test
+antfarm workflow install my-workflow
+antfarm workflow run my-workflow "My test task" --dry-run
+antfarm workflow run my-workflow "My test task"
+```
+
+**AGENTS.md must include:**
+- What the agent does
+- Step-by-step process
+- Output format with exact KEY: value pairs required
+
+**Tips:**
+- Every step must have explicit output format instructions
+- Use `verification` role for agents that check work (prevents them from writing)
+- Set `timeoutSeconds` for long-running steps (default 30min may be too short)
+- Keep stories to one developer session each (one context window)
+- Every acceptance criterion should be mechanically verifiable
+
+---
+
+## 12. Webhook Integration
+
+Runs can emit events to a webhook URL:
+
+```bash
+antfarm workflow run feature-dev "task" --notify-url "https://example.com/hook"
+# Or with auth: https://example.com/hook#auth=<base64-encoded-header>
+```
+
+Events fired: `run.started`, `run.completed`, `run.failed`, `step.pending`,
+`step.running`, `step.done`, `step.failed`, `story.done`, `story.failed`,
+`pipeline.advanced`
+
+Event format: JSON POST with event type, run ID, and relevant entity data.

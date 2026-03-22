@@ -127,6 +127,9 @@ function migrate(db: DatabaseSync): void {
   if (!backlogColNames.has("acceptance_criteria")) {
     db.exec("ALTER TABLE backlog ADD COLUMN acceptance_criteria TEXT");
   }
+  if (!backlogColNames.has("queue_order")) {
+    db.exec("ALTER TABLE backlog ADD COLUMN queue_order INTEGER DEFAULT NULL");
+  }
 
   // Add columns to steps table for backwards compat
   const cols = db.prepare("PRAGMA table_info(steps)").all() as Array<{ name: string }>;
@@ -209,6 +212,7 @@ export interface BacklogEntry {
   notes: string | null;
   tags: string | null;
   acceptance_criteria: string | null;
+  queue_order: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -225,6 +229,6 @@ export interface ProjectEntry {
 export function getBacklog(): BacklogEntry[] {
   const db = getDb();
   return db.prepare(
-    "SELECT id, title, description, status, priority, run_id, project_id, workflow_id, notes, tags, acceptance_criteria, created_at, updated_at FROM backlog ORDER BY priority ASC, created_at ASC"
+    "SELECT id, title, description, status, priority, run_id, project_id, workflow_id, notes, tags, acceptance_criteria, queue_order, created_at, updated_at FROM backlog ORDER BY priority ASC, created_at ASC"
   ).all() as unknown as BacklogEntry[];
 }
