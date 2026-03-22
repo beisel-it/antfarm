@@ -5,4 +5,7 @@ export {
   listBacklogEntries,
   getBacklogEntry,
   listBacklogEntriesForProject,
+  queueBacklogEntry,
+  getNextQueuedEntry,
+  cancelQueuedEntry,
 } from "./ops.js";
