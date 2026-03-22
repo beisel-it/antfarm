@@ -28,6 +28,8 @@ export type StepInfo = {
   max_retries: number;
   type: 'single' | 'loop';
   loop_config: string | null;
+  claimed_at: string | null;
+  finished_at: string | null;
   created_at: string;
   updated_at: string;
 };

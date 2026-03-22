@@ -913,7 +913,13 @@ async function main() {
       `Updated: ${run.updated_at}`,
       "",
       "Steps:",
-      ...steps.map((s) => `  [${s.status}] ${s.step_id} (${s.agent_id})`),
+      ...steps.flatMap((s) => {
+        const line = `  [${s.status}] ${s.step_id} (${s.agent_id})`;
+        const parts: string[] = [];
+        if (s.claimed_at) parts.push(`claimed: ${new Date(s.claimed_at).toLocaleString()}`);
+        if (s.finished_at) parts.push(`finished: ${new Date(s.finished_at).toLocaleString()}`);
+        return parts.length > 0 ? [line, `    ${parts.join("  ")}`] : [line];
+      }),
     ];
     const stories = getStories(run.id);
     if (stories.length > 0) {
