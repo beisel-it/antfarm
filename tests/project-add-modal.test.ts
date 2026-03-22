@@ -126,6 +126,7 @@ describe('US-010: Add New Project modal', () => {
     const fnBody = html.slice(fnStart, fnStart + 400);
     assert.ok(fnBody.includes('add-project-modal-overlay'), 'showProjectAddModal should reference the overlay');
     assert.ok(fnBody.includes('flex') || fnBody.includes('display'), 'showProjectAddModal should show the overlay');
+    assert.ok(fnBody.includes("overlay.classList.add('open')"), "showProjectAddModal should add 'open' class for opacity transition");
   });
 
   it('POST /api/projects creates a project', async () => {

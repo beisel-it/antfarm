@@ -52,6 +52,14 @@ describe('US-008: Project Edit Modal', () => {
     assert.ok(html.includes('function editProject('), 'editProject function should be present');
   });
 
+  it('editProject should call overlay.classList.add("open") for opacity transition', async () => {
+    const html = await fetchHTML();
+    const fnStart = html.indexOf('function editProject(');
+    assert.ok(fnStart !== -1, 'editProject should be defined');
+    const fnBody = html.slice(fnStart, fnStart + 800);
+    assert.ok(fnBody.includes("overlay.classList.add('open')"), "editProject should add 'open' class for opacity transition");
+  });
+
   it('should have closeEditProjectModal function in HTML', async () => {
     const html = await fetchHTML();
     assert.ok(html.includes('function closeEditProjectModal('), 'closeEditProjectModal function should be present');

@@ -753,7 +753,7 @@ async function submitAddProject() {
 
 function showProjectAddModal() {
   const overlay = document.getElementById('add-project-modal-overlay');
-  if (overlay) overlay.style.display = 'flex';
+  if (overlay) { overlay.style.display = 'flex'; overlay.classList.add('open'); }
   const nameInput = document.getElementById('ap-name');
   const gitInput = document.getElementById('ap-git-path');
   const urlInput = document.getElementById('ap-github-url');
@@ -767,7 +767,7 @@ function showProjectAddModal() {
 
 function closeAddProjectModal() {
   const overlay = document.getElementById('add-project-modal-overlay');
-  if (overlay) overlay.style.display = 'none';
+  if (overlay) { overlay.classList.remove('open'); overlay.style.display = 'none'; }
 }
 
 async function submitAddProjectModal() {
@@ -815,13 +815,13 @@ function editProject(id) {
   if (gitPathInput) gitPathInput.value = project.git_repo_path || '';
   if (githubUrlInput) githubUrlInput.value = project.github_repo_url || '';
   const overlay = document.getElementById('edit-project-modal-overlay');
-  if (overlay) overlay.style.display = 'flex';
+  if (overlay) { overlay.style.display = 'flex'; overlay.classList.add('open'); }
   if (nameInput) nameInput.focus();
 }
 
 function closeEditProjectModal() {
   const overlay = document.getElementById('edit-project-modal-overlay');
-  if (overlay) overlay.style.display = 'none';
+  if (overlay) { overlay.classList.remove('open'); overlay.style.display = 'none'; }
   editingProjectId = null;
 }
 
