@@ -335,7 +335,7 @@ export function cleanupAbandonedSteps(): void {
         const newRetry = story.retry_count + 1;
         const wfId = getWorkflowId(step.run_id);
         if (newRetry > story.max_retries) {
-          db.prepare("UPDATE stories SET status = 'failed', retry_count = ?, updated_at = datetime('now') WHERE id = ?").run(newRetry, story.id);
+          db.prepare("UPDATE stories SET status = 'failed', retry_count = ?, finished_at = datetime('now'), updated_at = datetime('now') WHERE id = ?").run(newRetry, story.id);
           db.prepare("UPDATE steps SET status = 'failed', output = 'Story abandoned and retries exhausted', current_story_id = NULL, finished_at = datetime('now'), updated_at = datetime('now') WHERE id = ?").run(step.id);
           db.prepare("UPDATE runs SET status = 'failed', updated_at = datetime('now') WHERE id = ?").run(step.run_id);
           emitEvent({ ts: new Date().toISOString(), event: "story.failed", runId: step.run_id, workflowId: wfId, stepId: step.step_id, storyId: story.story_id, storyTitle: story.title, detail: "Abandoned — retries exhausted" });
@@ -664,7 +664,7 @@ export function claimStep(agentId: string, sessionKey?: string): ClaimResult {
 
       // Claim the story
       db.prepare(
-        "UPDATE stories SET status = 'running', updated_at = datetime('now') WHERE id = ?"
+        "UPDATE stories SET status = 'running', claimed_at = datetime('now'), updated_at = datetime('now') WHERE id = ?"
       ).run(nextStory.id);
       db.prepare(
         "UPDATE steps SET status = 'running', current_story_id = ?, session_key = ?, claimed_at = datetime('now'), updated_at = datetime('now') WHERE id = ?"
@@ -804,7 +804,7 @@ export function completeStep(stepId: string, output: string): { advanced: boolea
 
     // Mark current story done
     db.prepare(
-      "UPDATE stories SET status = 'done', output = ?, updated_at = datetime('now') WHERE id = ?"
+      "UPDATE stories SET status = 'done', output = ?, finished_at = datetime('now'), updated_at = datetime('now') WHERE id = ?"
     ).run(output, step.current_story_id);
     emitEvent({ ts: new Date().toISOString(), event: "story.done", runId: step.run_id, workflowId: getWorkflowId(step.run_id), stepId: step.step_id, storyId: storyRow?.story_id, storyTitle: storyRow?.title });
     logger.info(`Story done: ${storyRow?.story_id} — ${storyRow?.title}`, { runId: step.run_id, stepId: step.step_id });
@@ -894,7 +894,7 @@ function handleVerifyEachCompletion(
       const newRetry = lastDoneStory.retry_count + 1;
       if (newRetry > lastDoneStory.max_retries) {
         // Story retries exhausted — fail everything
-        db.prepare("UPDATE stories SET status = 'failed', retry_count = ?, updated_at = datetime('now') WHERE id = ?").run(newRetry, lastDoneStory.id);
+        db.prepare("UPDATE stories SET status = 'failed', retry_count = ?, finished_at = datetime('now'), updated_at = datetime('now') WHERE id = ?").run(newRetry, lastDoneStory.id);
         db.prepare("UPDATE steps SET status = 'failed', finished_at = datetime('now'), updated_at = datetime('now') WHERE id = ?").run(loopStepId);
         db.prepare("UPDATE runs SET status = 'failed', updated_at = datetime('now') WHERE id = ?").run(verifyStep.run_id);
         const wfId = getWorkflowId(verifyStep.run_id);
@@ -1186,7 +1186,7 @@ export async function failStep(stepId: string, error: string): Promise<{ retryin
       const newRetry = story.retry_count + 1;
       if (newRetry > story.max_retries) {
         // Story retries exhausted
-        db.prepare("UPDATE stories SET status = 'failed', retry_count = ?, updated_at = datetime('now') WHERE id = ?").run(newRetry, story.id);
+        db.prepare("UPDATE stories SET status = 'failed', retry_count = ?, finished_at = datetime('now'), updated_at = datetime('now') WHERE id = ?").run(newRetry, story.id);
         db.prepare("UPDATE steps SET status = 'failed', output = ?, current_story_id = NULL, finished_at = datetime('now'), updated_at = datetime('now') WHERE id = ?").run(error, stepId);
         db.prepare("UPDATE runs SET status = 'failed', updated_at = datetime('now') WHERE id = ?").run(step.run_id);
         const wfId = getWorkflowId(step.run_id);
