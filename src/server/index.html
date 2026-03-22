@@ -1377,7 +1377,7 @@ function renderRunPanel(run, stories) {
     const icon = stepIcons[st] || '○';
     const hasOutput = !!s.output;
     const toggleAttr = hasOutput ? `onclick="this.querySelector('.step-details').classList.toggle('step-open');this.querySelector('.step-chevron').classList.toggle('step-chevron-open')" style="cursor:pointer"` : '';
-    return `<div class="step-row" style="flex-direction:column;align-items:stretch;gap:0;padding:0;overflow:hidden" ${toggleAttr}>
+    return `<div class="step-row" data-step-id="${s.id}" style="flex-direction:column;align-items:stretch;gap:0;padding:0;overflow:hidden" ${toggleAttr}>
       <div style="display:flex;align-items:center;gap:8px;padding:10px 12px">
         <div class="step-icon ${st}">${icon}</div>
         <div class="step-name" style="flex:1">${s.step_id}</div>
@@ -1419,6 +1419,16 @@ function renderRunPanel(run, stories) {
     parts.push('</div></div>');
   }
   const stepsHTML = parts.join('');
+  // Save open step IDs before replacing innerHTML
+  const openStepIds = new Set();
+  panel.querySelectorAll('.step-row[data-step-id]').forEach(row => {
+    const stepId = row.getAttribute('data-step-id');
+    const details = row.querySelector('.step-details');
+    const innerDetails = row.querySelector('details');
+    if (stepId && (details?.classList.contains('step-open') || innerDetails?.open)) {
+      openStepIds.add(stepId);
+    }
+  });
   panel.innerHTML = `
     <button class="panel-close" onclick="closePanel()">✕</button>
     <h2>${run.workflow_id}</h2>
@@ -1432,6 +1442,20 @@ function renderRunPanel(run, stories) {
       <div id="stories-panel"></div>
     <div id="activity-panel"></div>
   `;
+  // Restore open state for previously open steps
+  if (openStepIds.size > 0) {
+    panel.querySelectorAll('.step-row[data-step-id]').forEach(row => {
+      const stepId = row.getAttribute('data-step-id');
+      if (stepId && openStepIds.has(stepId)) {
+        const details = row.querySelector('.step-details');
+        const chevron = row.querySelector('.step-chevron');
+        const innerDetails = row.querySelector('details');
+        if (details) details.classList.add('step-open');
+        if (chevron) chevron.classList.add('step-chevron-open');
+        if (innerDetails) innerDetails.open = true;
+      }
+    });
+  }
 }
 
 function formatEventDesc(evt) {

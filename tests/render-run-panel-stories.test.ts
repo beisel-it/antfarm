@@ -44,6 +44,7 @@ function callRenderRunPanel(run: object, stories: object[] = [], windowStories: 
   const fakeEl = {
     get innerHTML() { return capturedHTML; },
     set innerHTML(v: string) { capturedHTML = v; },
+    querySelectorAll: (_selector: string) => [],
   };
 
   const context = {
