@@ -31,7 +31,7 @@ export function addBacklogEntry(fields: {
 
 export function updateBacklogEntry(
   id: string,
-  updates: Partial<Pick<BacklogEntry, "title" | "description" | "status" | "priority" | "run_id" | "project_id" | "workflow_id" | "notes" | "tags" | "acceptance_criteria">>
+  updates: Partial<Pick<BacklogEntry, "title" | "description" | "status" | "priority" | "run_id" | "project_id" | "workflow_id" | "notes" | "tags" | "acceptance_criteria" | "queue_order">>
 ): BacklogEntry | null {
   const db = getDb();
   const existing = getBacklogEntry(id);
@@ -80,6 +80,10 @@ export function updateBacklogEntry(
   if (updates.acceptance_criteria !== undefined) {
     setClauses.push("acceptance_criteria = ?");
     values.push(updates.acceptance_criteria);
+  }
+  if (updates.queue_order !== undefined) {
+    setClauses.push("queue_order = ?");
+    values.push(updates.queue_order);
   }
 
   if (setClauses.length === 0) return existing;
