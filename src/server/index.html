@@ -272,6 +272,27 @@ select:focus{outline:none;border-color:#8ECFC0}
 .project-add-btn{display:block;background:none;border:1px dashed var(--border);border-radius:4px;color:var(--text-secondary);cursor:pointer;font-size:11px;padding:5px;margin:4px 8px 8px;width:calc(100% - 16px);text-align:center;transition:border-color .15s,color .15s}
 .project-add-btn:hover{border-color:var(--accent-green);color:var(--accent-green)}
 
+/* ── Projects horizontal bar ─────────────────────────────────────── */
+.projects-bar{width:100%;background:var(--bg-surface);border-bottom:1px solid var(--border);padding:6px 16px;box-sizing:border-box;flex-shrink:0}
+.projects-bar-inner{display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;gap:6px;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none}
+.projects-bar-inner::-webkit-scrollbar{display:none}
+.project-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:12px;border:1px solid var(--border);background:var(--bg-surface-alt);color:var(--text-primary);font-size:12px;font-weight:500;cursor:pointer;user-select:none;white-space:nowrap;transition:border-color .15s,background .15s}
+.project-badge:hover{border-color:var(--accent-green)}
+.project-badge.selected{background:var(--accent-green);border-color:var(--accent-green);color:#fff}
+.project-badge-actions{display:inline-flex;align-items:center;gap:2px;margin-left:2px}
+.project-badge-edit-btn,.project-badge-delete-btn{background:none;border:none;cursor:pointer;padding:1px 3px;border-radius:3px;font-size:11px;line-height:1;color:inherit;opacity:.7;transition:opacity .15s}
+.project-badge-edit-btn:hover,.project-badge-delete-btn:hover{opacity:1}
+.project-badge.selected .project-badge-edit-btn,.project-badge.selected .project-badge-delete-btn{color:#fff}
+.project-badge-new-btn{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:12px;border:1px dashed var(--border);background:none;color:var(--text-secondary);font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;transition:border-color .15s,color .15s}
+.project-badge-new-btn:hover{border-color:var(--accent-green);color:var(--accent-green)}
+.project-badge-inline-confirm{display:none;align-items:center;gap:4px;background:var(--bg-surface-alt);border:1px solid var(--border);border-radius:4px;padding:2px 5px;margin-left:3px;z-index:1}
+.project-badge-inline-confirm.active{display:inline-flex}
+.project-badge-inline-confirm-delete{background:var(--accent-orange);border:none;border-radius:3px;padding:1px 7px;font-size:11px;color:#fff;cursor:pointer}
+.project-badge-inline-confirm-delete:hover{opacity:.85}
+.project-badge-inline-confirm-cancel{background:none;border:1px solid var(--border);border-radius:3px;padding:1px 7px;font-size:11px;color:var(--text-secondary);cursor:pointer}
+.project-badge-inline-confirm-cancel:hover{background:var(--bg-surface);color:var(--text-primary)}
+.board-wrapper{display:flex;flex-direction:column;min-height:calc(100vh - 57px)}
+
 /* ── Confirmation modal ────────────────────────────────────────── */
 .confirm-modal-backdrop{position:fixed;inset:0;background:var(--overlay);z-index:200;display:flex;align-items:center;justify-content:center}
 .confirm-modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--bg-surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 32px var(--shadow-heavy);z-index:201;padding:20px 24px;min-width:280px;max-width:440px;width:100%}
@@ -316,6 +337,7 @@ select:focus{outline:none;border-color:#8ECFC0}
   </div>
   <button class="theme-toggle" id="theme-toggle" title="Toggle light/dark mode" aria-label="Toggle light/dark mode">☀️</button>
 </header>
+<div id="projects-bar-container"></div>
 <div class="board" id="board"><div class="empty" style="margin:auto">Select a workflow</div></div>
 <div class="medic-panel" id="medic-panel">
   <div class="medic-panel-header">Workflow Medic</div>
@@ -383,6 +405,59 @@ select:focus{outline:none;border-color:#8ECFC0}
   </div>
 </div>
 
+<!-- Edit Project Modal -->
+<div class="overlay" id="edit-project-modal-overlay" style="display:none" onclick="if(event.target===this)closeEditProjectModal()">
+  <div class="panel" id="edit-project-modal">
+    <button class="panel-close" onclick="closeEditProjectModal()">✕</button>
+    <h2>Edit Project</h2>
+    <form id="edit-project-form" onsubmit="return false">
+      <div class="backlog-modal-field">
+        <label for="ep-name">Name <span style="color:var(--accent-orange)">*</span></label>
+        <input type="text" id="ep-name" required placeholder="Project name">
+      </div>
+      <div class="backlog-modal-field">
+        <label for="ep-git-path">Git Repo Path</label>
+        <input type="text" id="ep-git-path" placeholder="/path/to/repo">
+      </div>
+      <div class="backlog-modal-field">
+        <label for="ep-github-url">GitHub Repo URL</label>
+        <input type="text" id="ep-github-url" placeholder="https://github.com/owner/repo">
+      </div>
+      <div class="backlog-modal-actions">
+        <button type="button" id="ep-save-btn" class="backlog-modal-save-btn" onclick="submitEditProjectForm()">Save</button>
+        <button type="button" class="backlog-modal-cancel-btn" onclick="closeEditProjectModal()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Add Project Modal -->
+<div class="overlay" id="add-project-modal-overlay" style="display:none" onclick="if(event.target===this)closeAddProjectModal()">
+  <div class="panel" id="add-project-modal">
+    <button class="panel-close" onclick="closeAddProjectModal()">✕</button>
+    <h2>New Project</h2>
+    <form id="add-project-modal-form" onsubmit="return false">
+      <div class="backlog-modal-field">
+        <label for="ap-name">Name <span style="color:var(--accent-orange)">*</span></label>
+        <input type="text" id="ap-name" required placeholder="Project name">
+        <span id="ap-name-error" style="color:var(--accent-orange);font-size:11px;display:none">Name is required</span>
+      </div>
+      <div class="backlog-modal-field">
+        <label for="ap-git-path">Git Repo Path</label>
+        <input type="text" id="ap-git-path" placeholder="/path/to/repo">
+      </div>
+      <div class="backlog-modal-field">
+        <label for="ap-github-url">GitHub Repo URL</label>
+        <input type="text" id="ap-github-url" placeholder="https://github.com/owner/repo">
+      </div>
+      <div class="backlog-modal-actions">
+        <button type="button" id="ap-save-btn" class="backlog-modal-save-btn" onclick="submitAddProjectModal()">Create</button>
+        <button type="button" class="backlog-modal-cancel-btn" onclick="closeAddProjectModal()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <footer id="status-bar">
   <div class="medic-badge" id="medic-badge" onclick="toggleMedicPanel()" title="Medic watchdog status">
     <span class="medic-dot unknown" id="medic-dot"></span>
@@ -403,6 +478,7 @@ let backlogEntries = [];
 let editingBacklogId = null;
 let projects = [];
 let allRuns = [];
+let selectedProjectIds = [];
 let lastRefreshTime = Date.now();
 
 // ── Status filters ───────────────────────────────────────────────
@@ -483,17 +559,51 @@ async function loadWorkflows() {
 function selectWorkflow(id) {
   currentWf = workflows.find(w => w.id === id) || null;
   if (currentWf) loadRuns();
-  else document.getElementById('board').innerHTML = renderProjectsColumn() + '<div class="empty" style="margin:auto">Select a workflow</div>';
+  else document.getElementById('board').innerHTML = '<div class="empty" style="margin:auto">Select a workflow</div>';
+}
+
+async function fetchBacklogForProjects(pids) {
+  if (pids.length === 1) {
+    const wfPart = currentWf ? `&workflow=${encodeURIComponent(currentWf.id)}` : '';
+    return fetchJSON(`/api/backlog?project=${encodeURIComponent(pids[0])}${wfPart}`);
+  }
+  // Multi-select: fetch in parallel, merge and deduplicate
+  const results = await Promise.all(
+    pids.map(pid => {
+      const wfPart = currentWf ? `&workflow=${encodeURIComponent(currentWf.id)}` : '';
+      return fetchJSON(`/api/backlog?project=${encodeURIComponent(pid)}${wfPart}`);
+    })
+  );
+  const seen = new Set();
+  const merged = [];
+  for (const entries of results) {
+    for (const entry of entries) {
+      if (!seen.has(entry.id)) {
+        seen.add(entry.id);
+        merged.push(entry);
+      }
+    }
+  }
+  // Sort by priority DESC, then created_at ASC (same as server-side)
+  merged.sort((a, b) => {
+    if (b.priority !== a.priority) return b.priority - a.priority;
+    return a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0;
+  });
+  return merged;
 }
 
 async function loadBacklog() {
   try {
-    const qs = currentWf ? `?workflow=${encodeURIComponent(currentWf.id)}` : '';
-    backlogEntries = await fetchJSON(`/api/backlog${qs}`);
+    updateLastRefreshed();
+    if (selectedProjectIds.length === 0) {
+      const qs = currentWf ? `?workflow=${encodeURIComponent(currentWf.id)}` : '';
+      backlogEntries = await fetchJSON(`/api/backlog${qs}`);
+    } else {
+      backlogEntries = await fetchBacklogForProjects(selectedProjectIds);
+    }
   } catch {
     backlogEntries = [];
   }
-  updateLastRefreshed();
 }
 
 async function loadProjects() {
@@ -502,7 +612,13 @@ async function loadProjects() {
   } catch {
     projects = [];
   }
+  renderProjectsBarInto();
   updateLastRefreshed();
+}
+
+function renderProjectsBarInto() {
+  const container = document.getElementById('projects-bar-container');
+  if (container) container.innerHTML = renderProjectsBar();
 }
 
 function renderProjectsColumn() {
@@ -543,6 +659,50 @@ function renderProjectsColumn() {
     </div>
     <button class="project-add-btn" id="project-add-btn" onclick="showAddProjectForm()">+ Add Project</button>
   </div>`;
+}
+
+function renderProjectsBar() {
+  const badgesHTML = projects.map(p => {
+    const isSelected = selectedProjectIds.includes(p.id);
+    return `<div class="project-badge${isSelected ? ' selected' : ''}" data-project-id="${esc(p.id)}" onclick="toggleProjectSelection('${esc(p.id)}')">
+      <span class="project-badge-name">${esc(p.name)}</span>
+      <span class="project-badge-actions">
+        <button class="project-badge-edit-btn" onclick="event.stopPropagation();editProject('${esc(p.id)}')" title="Edit project">✎</button>
+        <button class="project-badge-delete-btn" onclick="deleteProjectBadge('${esc(p.id)}', event)" title="Delete project">✕</button>
+        <span class="project-badge-inline-confirm" id="badge-confirm-${esc(p.id)}">
+          <button class="project-badge-inline-confirm-delete" onclick="event.stopPropagation();confirmDeleteProjectBadge('${esc(p.id)}')">Delete</button>
+          <button class="project-badge-inline-confirm-cancel" onclick="event.stopPropagation();cancelDeleteProjectBadge('${esc(p.id)}')">Cancel</button>
+        </span>
+      </span>
+    </div>`;
+  }).join('');
+  return `<div class="projects-bar" id="projects-bar">
+    <div class="projects-bar-inner">
+      ${badgesHTML}
+      <button class="project-badge-new-btn" onclick="showProjectAddModal()">+ New</button>
+    </div>
+  </div>`;
+}
+
+function toggleProjectSelection(id) {
+  const idx = selectedProjectIds.indexOf(id);
+  if (idx === -1) {
+    selectedProjectIds.push(id);
+  } else {
+    selectedProjectIds.splice(idx, 1);
+  }
+  const bar = document.getElementById('projects-bar');
+  if (bar) {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = renderProjectsBar();
+    bar.replaceWith(tmp.firstElementChild);
+  }
+  // Reload data filtered by selected projects
+  if (currentWf) {
+    loadRuns();
+  } else {
+    loadBacklog().then(() => renderBoard());
+  }
 }
 
 function showAddProjectForm() {
@@ -591,6 +751,101 @@ async function submitAddProject() {
   } catch { /* ignore */ }
 }
 
+function showProjectAddModal() {
+  const overlay = document.getElementById('add-project-modal-overlay');
+  if (overlay) { overlay.style.display = 'flex'; overlay.classList.add('open'); }
+  const nameInput = document.getElementById('ap-name');
+  const gitInput = document.getElementById('ap-git-path');
+  const urlInput = document.getElementById('ap-github-url');
+  const errEl = document.getElementById('ap-name-error');
+  if (nameInput) nameInput.value = '';
+  if (gitInput) gitInput.value = '';
+  if (urlInput) urlInput.value = '';
+  if (errEl) errEl.style.display = 'none';
+  if (nameInput) nameInput.focus();
+}
+
+function closeAddProjectModal() {
+  const overlay = document.getElementById('add-project-modal-overlay');
+  if (overlay) { overlay.classList.remove('open'); overlay.style.display = 'none'; }
+}
+
+async function submitAddProjectModal() {
+  const nameEl = document.getElementById('ap-name');
+  const gitEl = document.getElementById('ap-git-path');
+  const urlEl = document.getElementById('ap-github-url');
+  const errEl = document.getElementById('ap-name-error');
+  const name = nameEl ? nameEl.value.trim() : '';
+  if (!name) {
+    if (errEl) errEl.style.display = '';
+    if (nameEl) nameEl.focus();
+    return;
+  }
+  if (errEl) errEl.style.display = 'none';
+  const body = { name };
+  const gitPath = gitEl ? gitEl.value.trim() : '';
+  const ghUrl = urlEl ? urlEl.value.trim() : '';
+  if (gitPath) body.gitRepoPath = gitPath;
+  if (ghUrl) body.githubRepoUrl = ghUrl;
+  try {
+    const r = await fetch(API + '/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) return;
+    closeAddProjectModal();
+    await loadProjects();
+    rerenderProjectsColumn();
+  } catch (e) {
+    console.error('Failed to create project', e);
+  }
+}
+
+let editingProjectId = null;
+
+function editProject(id) {
+  const project = projects.find(p => p.id === id);
+  if (!project) return;
+  editingProjectId = id;
+  const nameInput = document.getElementById('ep-name');
+  const gitPathInput = document.getElementById('ep-git-path');
+  const githubUrlInput = document.getElementById('ep-github-url');
+  if (nameInput) nameInput.value = project.name || '';
+  if (gitPathInput) gitPathInput.value = project.git_repo_path || '';
+  if (githubUrlInput) githubUrlInput.value = project.github_repo_url || '';
+  const overlay = document.getElementById('edit-project-modal-overlay');
+  if (overlay) { overlay.style.display = 'flex'; overlay.classList.add('open'); }
+  if (nameInput) nameInput.focus();
+}
+
+function closeEditProjectModal() {
+  const overlay = document.getElementById('edit-project-modal-overlay');
+  if (overlay) { overlay.classList.remove('open'); overlay.style.display = 'none'; }
+  editingProjectId = null;
+}
+
+async function submitEditProjectForm() {
+  if (!editingProjectId) return;
+  const name = document.getElementById('ep-name')?.value?.trim();
+  if (!name) return;
+  const git_repo_path = document.getElementById('ep-git-path')?.value?.trim() || null;
+  const github_repo_url = document.getElementById('ep-github-url')?.value?.trim() || null;
+  try {
+    const res = await fetch(API + '/api/projects/' + encodeURIComponent(editingProjectId), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, git_repo_path, github_repo_url })
+    });
+    if (!res.ok) throw new Error('Update failed');
+    closeEditProjectModal();
+    await loadProjects();
+    rerenderProjectsColumn();
+  } catch (e) {
+    console.error('Failed to update project:', e);
+  }
+}
+
 function deleteProject(id, btn) {
   const card = btn.closest('.project-card');
   const inlineConfirm = card.querySelector('.project-inline-confirm');
@@ -612,13 +867,37 @@ function cancelDeleteProject(card) {
   if (inlineConfirm) inlineConfirm.classList.remove('active');
 }
 
+function deleteProjectBadge(id, event) {
+  event.stopPropagation();
+  const confirm = document.getElementById('badge-confirm-' + id);
+  if (confirm) confirm.classList.add('active');
+}
+
+async function confirmDeleteProjectBadge(id) {
+  const confirm = document.getElementById('badge-confirm-' + id);
+  if (confirm) confirm.classList.remove('active');
+  try {
+    await fetch(API + '/api/projects/' + encodeURIComponent(id), { method: 'DELETE' });
+    if (selectedProjectIds.includes(id)) {
+      selectedProjectIds.splice(selectedProjectIds.indexOf(id), 1);
+      if (currentWf) {
+        loadRuns();
+      } else {
+        loadBacklog().then(() => renderBoard());
+      }
+    }
+    await loadProjects();
+    rerenderProjectsColumn();
+  } catch { /* ignore */ }
+}
+
+function cancelDeleteProjectBadge(id) {
+  const confirm = document.getElementById('badge-confirm-' + id);
+  if (confirm) confirm.classList.remove('active');
+}
+
 function rerenderProjectsColumn() {
-  const col = document.getElementById('projects-column');
-  if (!col) return;
-  const tmp = document.createElement('div');
-  tmp.innerHTML = renderProjectsColumn();
-  const newCol = tmp.firstElementChild;
-  if (newCol) col.replaceWith(newCol);
+  renderProjectsBarInto();
 }
 
 async function loadProjectDetail(detailsEl) {
@@ -662,10 +941,34 @@ function updateLastRefreshed() {
   lastRefreshTime = Date.now();
 }
 
+async function fetchRunsForProjects(pids) {
+  if (pids.length === 1) {
+    return fetchJSON(`/api/runs?workflow=${encodeURIComponent(currentWf.id)}&project=${encodeURIComponent(pids[0])}`);
+  }
+  // Multi-select: fetch in parallel, merge and deduplicate
+  const results = await Promise.all(
+    pids.map(pid => fetchJSON(`/api/runs?workflow=${encodeURIComponent(currentWf.id)}&project=${encodeURIComponent(pid)}`))
+  );
+  const seen = new Set();
+  const merged = [];
+  for (const runs of results) {
+    for (const run of runs) {
+      if (!seen.has(run.id)) {
+        seen.add(run.id);
+        merged.push(run);
+      }
+    }
+  }
+  return merged;
+}
+
 async function loadRuns() {
   if (!currentWf) return;
+  const runsPromise = selectedProjectIds.length === 0
+    ? fetchJSON(`/api/runs?workflow=${currentWf.id}`)
+    : fetchRunsForProjects(selectedProjectIds);
   const [runs] = await Promise.all([
-    fetchJSON(`/api/runs?workflow=${currentWf.id}`),
+    runsPromise,
     loadBacklog(),
     loadProjects(),
   ]);
@@ -1017,7 +1320,7 @@ function renderBoard(wf, runs) {
     </div>`;
   }).join('');
 
-  board.innerHTML = renderProjectsColumn() + renderBacklogColumn() + workflowColumnsHTML;
+  board.innerHTML = renderBacklogColumn() + workflowColumnsHTML;
 }
 
 const stepIcons = {done:'✓',running:'●',pending:'○',waiting:'◌',failed:'✗',error:'✗'};
@@ -1274,13 +1577,13 @@ document.getElementById('wf-select').addEventListener('change', e => selectWorkf
 initStatusFilterButtons();
 loadWorkflows();
 loadProjects().then(() => {
-  if (!currentWf) document.getElementById('board').innerHTML = renderProjectsColumn() + '<div class="empty" style="margin:auto">Select a workflow</div>';
+  if (!currentWf) document.getElementById('board').innerHTML = '<div class="empty" style="margin:auto">Select a workflow</div>';
 });
 setInterval(() => {
   if (currentWf) loadRuns();
   else {
     Promise.all([loadBacklog(), loadProjects()]).then(() => {
-      if (!currentWf) document.getElementById('board').innerHTML = renderProjectsColumn() + '<div class="empty" style="margin:auto">Select a workflow</div>';
+      if (!currentWf) document.getElementById('board').innerHTML = '<div class="empty" style="margin:auto">Select a workflow</div>';
     });
   }
 }, 30000);
