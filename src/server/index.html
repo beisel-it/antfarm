@@ -1342,9 +1342,12 @@ async function openRun(id) {
 async function refreshOpenRunPanel() {
   if (!openRunId) return;
   try {
+    const panel = document.getElementById('panel');
+    const scrollTop = panel ? panel.scrollTop : 0;
     const run = await fetchJSON(`/api/runs/${openRunId}`);
     const stories = await fetchJSON(`/api/runs/${openRunId}/stories`).catch(() => []);
     renderRunPanel(run, stories || []);
+    if (panel) panel.scrollTop = scrollTop;
     await Promise.all([loadStories(openRunId), loadActivity(openRunId)]);
   } catch {
     closePanel();
