@@ -150,7 +150,7 @@ select:focus{outline:none;border-color:#8ECFC0}
 /* ── Overlay / Panel ───────────────────────────────────────────── */
 .overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:var(--overlay);z-index:100;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .15s}
 .overlay.open{opacity:1;pointer-events:auto}
-.panel{background:var(--bg-surface);border:1px solid var(--border);border-radius:12px;width:90%;max-width:640px;max-height:85vh;overflow-y:auto;padding:24px;position:relative;box-shadow:0 8px 32px var(--shadow-heavy)}
+.panel{background:var(--bg-surface);border:1px solid var(--border);border-radius:12px;width:90%;max-width:640px;max-height:85vh;overflow-y:auto;padding:24px;position:relative;box-shadow:0 8px 32px var(--shadow-heavy);transition:opacity 0.1s ease}
 .panel-close{position:absolute;top:12px;right:16px;background:none;border:none;color:var(--text-secondary);font-size:20px;cursor:pointer;padding:4px 8px;border-radius:4px}
 .panel-close:hover{color:var(--text-primary);background:var(--bg-column-header)}
 .panel h2{font-size:16px;font-weight:600;color:var(--text-primary);margin-bottom:4px;padding-right:40px}
@@ -470,6 +470,7 @@ select:focus{outline:none;border-color:#8ECFC0}
 
 <script>
 const API = '';
+const GLOBAL_REFRESH_MS = 30000;
 let workflows = [];
 let currentWf = null;
 let openRunId = null;
@@ -528,7 +529,7 @@ function startOpenRunRefresh() {
   clearOpenRunRefresh();
   openRunRefreshInterval = setInterval(() => {
     void refreshOpenRunPanel();
-  }, 5000);
+  }, GLOBAL_REFRESH_MS);
 }
 
 async function fetchJSON(url) {
@@ -1328,10 +1329,49 @@ function esc(s) { if (!s) return ''; return s.replace(/&/g,'&amp;').replace(/</g
 // Normalize SQLite datetime('now') format (no T/Z) to proper ISO 8601 UTC
 function parseTS(ts) { if (!ts) return null; if (!ts.endsWith('Z') && !ts.includes('+')) ts = ts.replace(' ', 'T') + 'Z'; return new Date(ts); }
 
+function saveOpenStates(panel) {
+  const openIds = new Set();
+  if (!panel) return openIds;
+  panel.querySelectorAll('.step-row[data-step-id]').forEach(row => {
+    const stepId = row.getAttribute('data-step-id');
+    const details = row.querySelector('.step-details');
+    const innerDetails = row.querySelector('details');
+    if (stepId && (details?.classList.contains('step-open') || innerDetails?.open)) {
+      openIds.add(stepId);
+    }
+  });
+  return openIds;
+}
+function restoreOpenStates(panel, openIds) {
+  if (!panel || !openIds || openIds.size === 0) return;
+  panel.querySelectorAll('.step-row[data-step-id]').forEach(row => {
+    const stepId = row.getAttribute('data-step-id');
+    if (stepId && openIds.has(stepId)) {
+      const details = row.querySelector('.step-details');
+      const chevron = row.querySelector('.step-chevron');
+      const innerDetails = row.querySelector('details');
+      if (details) details.classList.add('step-open');
+      if (chevron) chevron.classList.add('step-chevron-open');
+      if (innerDetails) innerDetails.open = true;
+    }
+  });
+}
+function saveScroll(panel) {
+  return panel ? panel.scrollTop : 0;
+}
+function restoreScroll(panel, top) {
+  if (panel) panel.scrollTop = top;
+}
+
 async function openRun(id) {
+  const panel = document.getElementById('panel');
+  const openIds = saveOpenStates(panel);
+  const scrollTop = saveScroll(panel);
   const run = await fetchJSON(`/api/runs/${id}`);
   const stories = await fetchJSON(`/api/runs/${id}/stories`).catch(() => []);
   renderRunPanel(run, stories || []);
+  restoreOpenStates(panel, openIds);
+  restoreScroll(panel, scrollTop);
   await Promise.all([loadStories(id), loadActivity(id)]);
   openRunId = id;
   document.getElementById('overlay').classList.add('open');
@@ -1341,9 +1381,16 @@ async function openRun(id) {
 async function refreshOpenRunPanel() {
   if (!openRunId) return;
   try {
+    const panel = document.getElementById('panel');
+    const openIds = saveOpenStates(panel);
+    const scrollTop = saveScroll(panel);
+    if (panel) panel.style.opacity = '0.85';
     const run = await fetchJSON(`/api/runs/${openRunId}`);
     const stories = await fetchJSON(`/api/runs/${openRunId}/stories`).catch(() => []);
     renderRunPanel(run, stories || []);
+    restoreOpenStates(panel, openIds);
+    restoreScroll(panel, scrollTop);
+    if (panel) panel.style.opacity = '1';
     await Promise.all([loadStories(openRunId), loadActivity(openRunId)]);
   } catch {
     closePanel();
@@ -1376,7 +1423,7 @@ function renderRunPanel(run, stories) {
     const icon = stepIcons[st] || '○';
     const hasOutput = !!s.output;
     const toggleAttr = hasOutput ? `onclick="this.querySelector('.step-details').classList.toggle('step-open');this.querySelector('.step-chevron').classList.toggle('step-chevron-open')" style="cursor:pointer"` : '';
-    return `<div class="step-row" style="flex-direction:column;align-items:stretch;gap:0;padding:0;overflow:hidden" ${toggleAttr}>
+    return `<div class="step-row" data-step-id="${s.id}" style="flex-direction:column;align-items:stretch;gap:0;padding:0;overflow:hidden" ${toggleAttr}>
       <div style="display:flex;align-items:center;gap:8px;padding:10px 12px">
         <div class="step-icon ${st}">${icon}</div>
         <div class="step-name" style="flex:1">${s.step_id}</div>
@@ -1575,6 +1622,7 @@ async function loadStories(runId) {
 
 document.getElementById('wf-select').addEventListener('change', e => selectWorkflow(e.target.value));
 initStatusFilterButtons();
+document.getElementById('refresh-note').textContent = `Auto-refresh: ${Math.floor(GLOBAL_REFRESH_MS / 1000)}s`;
 loadWorkflows();
 loadProjects().then(() => {
   if (!currentWf) document.getElementById('board').innerHTML = '<div class="empty" style="margin:auto">Select a workflow</div>';
@@ -1586,12 +1634,12 @@ setInterval(() => {
       if (!currentWf) document.getElementById('board').innerHTML = '<div class="empty" style="margin:auto">Select a workflow</div>';
     });
   }
-}, 30000);
+}, GLOBAL_REFRESH_MS);
 
 setInterval(() => {
   const el = document.getElementById('next-refresh');
   if (!el) return;
-  const remaining = 30 - Math.floor((Date.now() - lastRefreshTime) / 1000);
+  const remaining = Math.floor(GLOBAL_REFRESH_MS / 1000) - Math.floor((Date.now() - lastRefreshTime) / 1000);
   if (remaining <= 0) {
     el.textContent = 'Refreshing...';
   } else {
