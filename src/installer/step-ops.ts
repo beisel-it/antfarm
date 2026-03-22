@@ -193,6 +193,8 @@ export function getStories(runId: string): Story[] {
     output: r.output ?? undefined,
     retryCount: r.retry_count,
     maxRetries: r.max_retries,
+    claimedAt: r.claimed_at ?? null,
+    finishedAt: r.finished_at ?? null,
   }));
 }
 
@@ -219,6 +221,8 @@ export function getCurrentStory(stepId: string): Story | null {
     output: row.output ?? undefined,
     retryCount: row.retry_count,
     maxRetries: row.max_retries,
+    claimedAt: row.claimed_at ?? null,
+    finishedAt: row.finished_at ?? null,
   };
 }
 
@@ -688,6 +692,8 @@ export function claimStep(agentId: string, sessionKey?: string): ClaimResult {
         output: nextStory.output ?? undefined,
         retryCount: nextStory.retry_count,
         maxRetries: nextStory.max_retries,
+        claimedAt: nextStory.claimed_at ?? null,
+        finishedAt: nextStory.finished_at ?? null,
       };
 
       const allStories = getStories(step.run_id);

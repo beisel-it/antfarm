@@ -83,6 +83,8 @@ export type Story = {
   output?: string;
   retryCount: number;
   maxRetries: number;
+  claimedAt: string | null;
+  finishedAt: string | null;
 };
 
 export type WorkflowSpec = {
