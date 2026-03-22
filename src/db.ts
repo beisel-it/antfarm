@@ -50,6 +50,8 @@ function migrate(db: DatabaseSync): void {
       output TEXT,
       retry_count INTEGER DEFAULT 0,
       max_retries INTEGER DEFAULT 2,
+      claimed_at TEXT,
+      finished_at TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -142,6 +144,12 @@ function migrate(db: DatabaseSync): void {
   }
   if (!colNames.has("session_key")) {
     db.exec("ALTER TABLE steps ADD COLUMN session_key TEXT");
+  }
+  if (!colNames.has("claimed_at")) {
+    db.exec("ALTER TABLE steps ADD COLUMN claimed_at TEXT");
+  }
+  if (!colNames.has("finished_at")) {
+    db.exec("ALTER TABLE steps ADD COLUMN finished_at TEXT");
   }
 
   // Add columns to runs table for backwards compat
