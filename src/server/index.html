@@ -186,6 +186,7 @@ select:focus{outline:none;border-color:#8ECFC0}
 .badge-waiting{background:var(--accent-muted);color:var(--text-secondary)}
 .badge-pending{background:var(--accent-muted);color:var(--text-secondary)}
 .badge-blocked{background:var(--accent-orange-faint);color:var(--accent-orange)}
+.badge-dispatching{background:var(--accent-teal-subtle);color:var(--accent-teal);opacity:.8}
 
 /* ── Backlog column ─────────────────────────────────────────────── */
 .backlog-card{background:var(--bg-surface-alt);border:1px solid var(--border);border-radius:6px;padding:12px}
@@ -1091,7 +1092,7 @@ function renderBacklogColumn() {
   const cardHTML = entries.length === 0
     ? '<div class="empty">No backlog entries</div>'
     : entries.map(entry => {
-        const isDispatched = entry.status === 'dispatched';
+        const isDispatched = entry.status === 'dispatched' || entry.status === 'dispatching';
         const isQueued = entry.status === 'queued';
         const hasActiveRun = entry.project_id
           ? allRuns.some(r => r.project_id === entry.project_id && r.status === 'running')
