@@ -20,7 +20,7 @@ version: 1
 agents:
   - id: planner
     name: Planner Agent
-    model: anthropic/claude-opus-4-6
+    model: openai-codex/gpt-5.1-codex-max
     workspace:
       baseDir: agents/planner
       files:
@@ -83,8 +83,8 @@ async function testModelFieldPreservedInWorkflowSpec(): Promise<void> {
     const reviewer = spec.agents.find((a) => a.id === "reviewer");
 
     // Verify model fields are preserved
-    if (planner?.model !== "anthropic/claude-opus-4-6") {
-      throw new Error(`Expected planner.model to be "anthropic/claude-opus-4-6", got "${planner?.model}"`);
+    if (planner?.model !== "openai-codex/gpt-5.1-codex-max") {
+      throw new Error(`Expected planner.model to be "openai-codex/gpt-5.1-codex-max", got "${planner?.model}"`);
     }
     if (developer?.model !== "openai/gpt-5") {
       throw new Error(`Expected developer.model to be "openai/gpt-5", got "${developer?.model}"`);
@@ -93,7 +93,7 @@ async function testModelFieldPreservedInWorkflowSpec(): Promise<void> {
       throw new Error(`Expected reviewer.model to be undefined, got "${reviewer?.model}"`);
     }
 
-    console.log("  ✓ planner has model: anthropic/claude-opus-4-6");
+    console.log("  ✓ planner has model: openai-codex/gpt-5.1-codex-max");
     console.log("  ✓ developer has model: openai/gpt-5");
     console.log("  ✓ reviewer has no model (undefined)");
     console.log("PASS: model field preserved in WorkflowSpec\n");
@@ -109,14 +109,14 @@ async function testWorkflowAgentTypeHasModelField(): Promise<void> {
   const agent: WorkflowAgent = {
     id: "test-agent",
     name: "Test",
-    model: "anthropic/claude-opus-4-6",
+    model: "openai-codex/gpt-5.1-codex-max",
     workspace: {
       baseDir: "agents/test",
       files: { "AGENTS.md": "agents/test/AGENTS.md" },
     },
   };
 
-  if (agent.model !== "anthropic/claude-opus-4-6") {
+  if (agent.model !== "openai-codex/gpt-5.1-codex-max") {
     throw new Error("WorkflowAgent type does not properly support model field");
   }
 

@@ -4,13 +4,13 @@ version: 3
 description: |
   Hardened multi-agent deep research pipeline for OpenClaw. GPT-5.4 handles
   scoping, orchestration, broad coverage, and verification at extra-high
-  thinking. Claude Opus 4.6 handles deep analysis, skeptical pressure-testing,
+  thinking. GPT-5.1 Codex Max handles deep analysis, skeptical pressure-testing,
   and final writing at high thinking. The workflow is evidence-first,
   prompt-injection-aware, and passes structured claim/source packets between
   stages.
 
 polling:
-  model: anthropic/claude-sonnet-4-6
+  model: openai-codex/gpt-5.3-codex
   thinking: high
   timeoutSeconds: 120
 
@@ -89,7 +89,7 @@ agents:
   - id: analyst
     name: Analyst
     role: research
-    model: anthropic/claude-opus-4-6
+    model: openai-codex/gpt-5.1-codex-max
     thinking: high
     timeoutSeconds: 2400
     description: Deep-reading agent for nuance, synthesis, and implications.
@@ -103,7 +103,7 @@ agents:
   - id: skeptic
     name: Skeptic
     role: research
-    model: anthropic/claude-opus-4-6
+    model: openai-codex/gpt-5.1-codex-max
     thinking: high
     timeoutSeconds: 1800
     description: Searches for conflicts, missing evidence, and weak claims.
@@ -131,7 +131,7 @@ agents:
   - id: writer
     name: Final Writer
     role: planning
-    model: anthropic/claude-opus-4-6
+    model: openai-codex/gpt-5.1-codex-max
     thinking: high
     timeoutSeconds: 2400
     description: Writes the final report from verified findings only.

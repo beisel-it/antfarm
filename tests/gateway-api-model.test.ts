@@ -32,7 +32,7 @@ describe("gateway-api model parameter support", () => {
         payload: {
           kind: "agentTurn",
           message: "test prompt",
-          model: "claude-sonnet-4-20250514",
+          model: "openai-codex/gpt-5.3-codex",
           timeoutSeconds: 60,
         },
         enabled: true,
@@ -45,7 +45,7 @@ describe("gateway-api model parameter support", () => {
       const fetchMock = globalThis.fetch as any;
       const callArgs = fetchMock.mock.calls[0].arguments;
       const body = JSON.parse(callArgs[1].body);
-      assert.equal(body.args.job.payload.model, "claude-sonnet-4-20250514");
+      assert.equal(body.args.job.payload.model, "openai-codex/gpt-5.3-codex");
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -138,7 +138,7 @@ describe("gateway-api model parameter support", () => {
         payload: {
           kind: "agentTurn",
           message: "test",
-          model: "claude-sonnet-4-20250514",
+          model: "openai-codex/gpt-5.3-codex",
         },
         enabled: true,
       });
@@ -175,7 +175,7 @@ describe("gateway-api model parameter support", () => {
         payload: {
           kind: "agentTurn",
           message: "poll",
-          model: "claude-sonnet-4-20250514",
+          model: "openai-codex/gpt-5.3-codex",
         },
         delivery: { mode: "none" },
         enabled: true,
@@ -187,7 +187,7 @@ describe("gateway-api model parameter support", () => {
       const callArgs = fetchMock.mock.calls[0].arguments;
       const body = JSON.parse(callArgs[1].body);
       assert.equal(body.args.job.delivery.mode, "none");
-      assert.equal(body.args.job.payload.model, "claude-sonnet-4-20250514");
+      assert.equal(body.args.job.payload.model, "openai-codex/gpt-5.3-codex");
     } finally {
       globalThis.fetch = originalFetch;
     }

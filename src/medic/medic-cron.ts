@@ -7,7 +7,7 @@ import { readOpenClawConfig, writeOpenClawConfig } from "../installer/openclaw-c
 
 const MEDIC_CRON_NAME = "antfarm/medic";
 const MEDIC_EVERY_MS = 5 * 60 * 1000; // 5 minutes
-const MEDIC_MODEL = "anthropic/claude-haiku-4-5";
+const MEDIC_MODEL = "openai-codex/gpt-5.1-codex-mini";
 const MEDIC_TIMEOUT_SECONDS = 120;
 
 function buildMedicPrompt(): string {

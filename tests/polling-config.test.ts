@@ -19,13 +19,13 @@ name: Test Polling Config
 version: 1
 
 polling:
-  model: anthropic/claude-sonnet-4-20250514
+  model: openai-codex/gpt-5.3-codex
   timeoutSeconds: 30
 
 agents:
   - id: planner
     name: Planner Agent
-    pollingModel: anthropic/claude-haiku-3
+    pollingModel: openai-codex/gpt-5.1-codex-mini
     workspace:
       baseDir: agents/planner
       files:
@@ -33,7 +33,7 @@ agents:
 
   - id: developer
     name: Developer Agent
-    model: anthropic/claude-opus-4-6
+    model: openai-codex/gpt-5.1-codex-max
     workspace:
       baseDir: agents/developer
       files:
@@ -72,7 +72,7 @@ name: Test Bad Polling
 version: 1
 
 polling:
-  model: anthropic/claude-sonnet-4-20250514
+  model: openai-codex/gpt-5.3-codex
   timeoutSeconds: -5
 
 agents:
@@ -108,7 +108,7 @@ describe("polling config", () => {
 
     const spec = await loadWorkflowSpec(dir);
     assert.ok(spec.polling, "polling config should exist");
-    assert.equal(spec.polling.model, "anthropic/claude-sonnet-4-20250514");
+    assert.equal(spec.polling.model, "openai-codex/gpt-5.3-codex");
     assert.equal(spec.polling.timeoutSeconds, 30);
   });
 
@@ -120,7 +120,7 @@ describe("polling config", () => {
     const spec = await loadWorkflowSpec(dir);
     const planner = spec.agents.find(a => a.id === "planner");
     assert.ok(planner, "planner agent should exist");
-    assert.equal(planner.pollingModel, "anthropic/claude-haiku-3");
+    assert.equal(planner.pollingModel, "openai-codex/gpt-5.1-codex-mini");
 
     const developer = spec.agents.find(a => a.id === "developer");
     assert.ok(developer, "developer agent should exist");

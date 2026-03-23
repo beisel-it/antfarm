@@ -3,8 +3,8 @@
  *
  * Bug #121: The stale dist was using buildAgentPrompt() which produced
  * cron payloads WITHOUT a model field, causing all polling to run on
- * the agent's default model (opus) instead of the cheap polling model
- * (sonnet). This test ensures setupAgentCrons always produces payloads
+ * the agent's default model (opus) instead of the configured polling model
+ * (gpt-5.3-codex). This test ensures setupAgentCrons always produces payloads
  * with the correct polling model.
  */
 
@@ -48,7 +48,7 @@ describe("cron payload includes polling model (regression #121)", () => {
       name: "Test",
       version: 1,
       polling: {
-        model: "claude-sonnet-4-20250514",
+        model: "openai-codex/gpt-5.3-codex",
         timeoutSeconds: 120,
       },
       agents: [
@@ -71,8 +71,8 @@ describe("cron payload includes polling model (regression #121)", () => {
     // Key regression assertion: payload.model must be the polling model, NOT opus
     assert.equal(
       payload.model,
-      "claude-sonnet-4-20250514",
-      "cron payload must use polling model (sonnet), not the default agent model (opus)"
+      "openai-codex/gpt-5.3-codex",
+      "cron payload must use the configured polling model, not the default agent model (opus)"
     );
 
     // Also verify the prompt uses buildPollingPrompt (contains sessions_spawn)
@@ -96,7 +96,7 @@ describe("cron payload includes polling model (regression #121)", () => {
       name: "Test Override",
       version: 1,
       polling: {
-        model: "claude-sonnet-4-20250514",
+        model: "openai-codex/gpt-5.3-codex",
         timeoutSeconds: 120,
       },
       agents: [
@@ -132,7 +132,7 @@ describe("cron payload includes polling model (regression #121)", () => {
     // Agent without override should use workflow-level polling model
     assert.equal(
       capturedJobs[1].payload.model,
-      "claude-sonnet-4-20250514",
+      "openai-codex/gpt-5.3-codex",
       "agent without pollingModel should use workflow-level polling model"
     );
   });
@@ -145,7 +145,7 @@ describe("cron payload includes polling model (regression #121)", () => {
       name: "Test Timeout",
       version: 1,
       polling: {
-        model: "claude-sonnet-4-20250514",
+        model: "openai-codex/gpt-5.3-codex",
         timeoutSeconds: 120,
       },
       agents: [

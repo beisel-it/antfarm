@@ -161,7 +161,7 @@ All agents must:
 
 ## 5. Analyst
 
-**Model:** `anthropic/claude-opus-4-6` @ `high`
+**Model:** `openai-codex/gpt-5.1-codex-max` @ `high`
 
 **Goal:** Go deep on the most important sources and pull out nuance, synthesis, and implications.
 
@@ -182,7 +182,7 @@ All agents must:
 
 ## 6. Skeptic
 
-**Model:** `anthropic/claude-opus-4-6` @ `high`
+**Model:** `openai-codex/gpt-5.1-codex-max` @ `high`
 
 **Goal:** Attack the packet before it becomes a report.
 
@@ -225,7 +225,7 @@ All agents must:
 
 ## 8. Writer
 
-**Model:** `anthropic/claude-opus-4-6` @ `high`
+**Model:** `openai-codex/gpt-5.1-codex-max` @ `high`
 
 **Goal:** Produce a strong final report from verified material only.
 

@@ -100,7 +100,7 @@ describe("WorkflowSpec types", () => {
       name: "Test Ops Agent",
       description: "Test operations agent",
       role: "coding",
-      model: "anthropic/claude-sonnet-4-5",
+      model: "openai-codex/gpt-5.3-codex",
       timeoutSeconds: 600,
       workspace: {
         baseDir: "agents/test",
@@ -124,7 +124,7 @@ describe("WorkflowSpec types", () => {
       name: "Ops Workflow with Features",
       version: 1,
       polling: {
-        model: "anthropic/claude-sonnet-4-5",
+        model: "openai-codex/gpt-5.3-codex",
         timeoutSeconds: 300,
       },
       agents: [

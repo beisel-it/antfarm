@@ -13,9 +13,9 @@ describe("two-phase-integration", () => {
   // The cron job payload model is set by setupAgentCrons; we test the prompt side here.
   describe("polling config creates correct prompt structure", () => {
     it("polling prompt with custom work model embeds that model for Phase 2", () => {
-      const prompt = buildPollingPrompt("feature-dev", "developer", "anthropic/claude-opus-4-6");
+      const prompt = buildPollingPrompt("feature-dev", "developer", "openai-codex/gpt-5.1-codex-max");
       // Phase 2 should use the specified work model via sessions_spawn
-      assert.ok(prompt.includes("anthropic/claude-opus-4-6"), "work model in sessions_spawn");
+      assert.ok(prompt.includes("openai-codex/gpt-5.1-codex-max"), "work model in sessions_spawn");
       assert.ok(prompt.includes("sessions_spawn"), "should trigger sessions_spawn for Phase 2");
     });
 

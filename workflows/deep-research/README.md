@@ -5,7 +5,7 @@ Hybrid deep-research workflow for Antfarm/OpenClaw.
 ## Model split
 
 - **Planner / Orchestrator / Verifier:** `openai-codex/gpt-5.4`
-- **Deep analyst / Final writer:** `anthropic/claude-opus-4-6`
+- **Deep analyst / Final writer:** `openai-codex/gpt-5.1-codex-max`
 - **Polling:** `lmstudio/qwen-fast`
 
 ## Why it is structured this way
