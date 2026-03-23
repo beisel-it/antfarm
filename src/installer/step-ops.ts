@@ -184,6 +184,52 @@ function findMissingTemplateKeys(template: string, context: Record<string, strin
   return missing;
 }
 
+function buildStepContext(runId: string): Record<string, string> {
+  const db = getDb();
+  const run = db.prepare("SELECT context FROM runs WHERE id = ?").get(runId) as { context: string } | undefined;
+  const context: Record<string, string> = run ? JSON.parse(run.context) : {};
+
+  context["run_id"] = runId;
+
+  if (context["repo"] && context["branch"]) {
+    context["has_frontend_changes"] = computeHasFrontendChanges(context["repo"], context["branch"]);
+  } else {
+    context["has_frontend_changes"] = "false";
+  }
+
+  const hasStories = db.prepare(
+    "SELECT COUNT(*) as cnt FROM stories WHERE run_id = ?"
+  ).get(runId) as { cnt: number };
+  if (hasStories.cnt > 0) {
+    context["progress"] = readProgressFile(runId);
+  }
+
+  return context;
+}
+
+function isStepInputReady(inputTemplate: string, context: Record<string, string>): boolean {
+  return findMissingTemplateKeys(inputTemplate, context).length === 0;
+}
+
+function promoteStepToPendingIfReady(stepId: string): boolean {
+  const db = getDb();
+  const step = db.prepare(
+    "SELECT id, run_id, input_template FROM steps WHERE id = ?"
+  ).get(stepId) as { id: string; run_id: string; input_template: string } | undefined;
+
+  if (!step) return false;
+
+  const context = buildStepContext(step.run_id);
+  if (!isStepInputReady(step.input_template, context)) {
+    return false;
+  }
+
+  db.prepare(
+    "UPDATE steps SET status = 'pending', updated_at = datetime('now') WHERE id = ?"
+  ).run(step.id);
+  return true;
+}
+
 /**
  * Get the workspace path for an OpenClaw agent by its id.
  */
@@ -620,18 +666,7 @@ export function claimStep(agentId: string, sessionKey?: string): ClaimResult {
   if (runStatus?.status === "failed") return { found: false };
 
   // Get run context
-  const run = db.prepare("SELECT context FROM runs WHERE id = ?").get(step.run_id) as { context: string } | undefined;
-  const context: Record<string, string> = run ? JSON.parse(run.context) : {};
-
-  // Always inject run_id so templates can use {{run_id}} (e.g. for scoped progress files)
-  context["run_id"] = step.run_id;
-
-  // Compute has_frontend_changes from git diff when repo and branch are available
-  if (context["repo"] && context["branch"]) {
-    context["has_frontend_changes"] = computeHasFrontendChanges(context["repo"], context["branch"]);
-  } else {
-    context["has_frontend_changes"] = "false";
-  }
+  const context = buildStepContext(step.run_id);
 
   // T6: Loop step claim logic
   if (step.type === "loop") {
@@ -794,7 +829,16 @@ export function claimStep(agentId: string, sessionKey?: string): ClaimResult {
 
   const missingKeys = findMissingTemplateKeys(step.input_template, context);
   if (missingKeys.length > 0) {
-    failStepWithMissingInputs(step.id, step.step_id, step.run_id, missingKeys);
+    db.prepare(
+      "UPDATE steps SET status = 'waiting', updated_at = datetime('now') WHERE id = ?"
+    ).run(step.id);
+    logger.warn(
+      `Step ${step.step_id} was pending but input is not ready; returned to waiting (missing: ${missingKeys.join(", ")})`,
+      {
+        runId: step.run_id,
+        stepId: step.step_id,
+      }
+    );
     return { found: false };
   }
 
@@ -883,9 +927,7 @@ export function completeStep(stepId: string, output: string): { advanced: boolea
       ).get(step.run_id, loopConfig.verifyStep) as { id: string } | undefined;
 
       if (verifyStep) {
-        db.prepare(
-          "UPDATE steps SET status = 'pending', updated_at = datetime('now') WHERE id = ?"
-        ).run(verifyStep.id);
+        promoteStepToPendingIfReady(verifyStep.id);
         // Loop step stays 'running' - preserve existing session_key
         db.prepare(
           "UPDATE steps SET status = 'running', session_key = ?, updated_at = datetime('now') WHERE id = ?"
@@ -1104,9 +1146,21 @@ export function advancePipeline(runId: string): { advanced: boolean; runComplete
     return { advanced: false, runCompleted: false };
   }
 
-  const next = db.prepare(
-    "SELECT id, step_id FROM steps WHERE run_id = ? AND status = 'waiting' ORDER BY step_index ASC LIMIT 1"
-  ).get(runId) as { id: string; step_id: string } | undefined;
+  const waitingSteps = db.prepare(
+    "SELECT id, step_id FROM steps WHERE run_id = ? AND status = 'waiting' ORDER BY step_index ASC"
+  ).all(runId) as { id: string; step_id: string }[];
+
+  let next: { id: string; step_id: string } | undefined;
+  for (const candidate of waitingSteps) {
+    if (promoteStepToPendingIfReady(candidate.id)) {
+      next = candidate;
+      break;
+    }
+  }
+
+  if (!next && waitingSteps.length > 0) {
+    return { advanced: false, runCompleted: false };
+  }
 
   const incomplete = db.prepare(
     "SELECT id FROM steps WHERE run_id = ? AND status IN ('failed', 'pending', 'running') LIMIT 1"
@@ -1118,9 +1172,6 @@ export function advancePipeline(runId: string): { advanced: boolean; runComplete
 
   const wfId = getWorkflowId(runId);
   if (next) {
-    db.prepare(
-      "UPDATE steps SET status = 'pending', updated_at = datetime('now') WHERE id = ?"
-    ).run(next.id);
     emitEvent({ ts: new Date().toISOString(), event: "pipeline.advanced", runId, workflowId: wfId, stepId: next.step_id });
     emitEvent({ ts: new Date().toISOString(), event: "step.pending", runId, workflowId: wfId, stepId: next.step_id });
     return { advanced: true, runCompleted: false };
