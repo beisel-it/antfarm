@@ -18,7 +18,11 @@ describe("cron payload includes polling model (regression #121)", () => {
   beforeEach(() => {
     capturedJobs = [];
     originalFetch = globalThis.fetch;
-    // Mock fetch to capture the cron job payloads
+    // Note: these tests call setupAgentCrons() directly, NOT via ensureWorkflowCrons().
+    // The ANTFARM_SKIP_CRON guard only lives in ensureWorkflowCrons/teardownWorkflowCronsIfIdle,
+    // so ANTFARM_SKIP_CRON has no effect here — tests are not blocked by it.
+    // The fetch mock below replaces the db-test-setup.js guardedFetch, so gateway calls
+    // are intercepted and recorded rather than being blocked or hitting the real gateway.
     globalThis.fetch = mock.fn(async (_url: any, opts: any) => {
       const body = JSON.parse(opts.body);
       if (body.args?.job) {
