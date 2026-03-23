@@ -391,6 +391,19 @@ export function cleanupAbandonedSteps(): void {
     }
   }
 
+  // Reset stale 'dispatching' backlog entries back to 'queued'
+  // A 'dispatching' entry means runWorkflow() was about to be called; if it's been
+  // stuck for >60s the caller must have crashed before updating the status.
+  const staleDispatching = db.prepare(
+    "SELECT id FROM backlog WHERE status='dispatching' AND (julianday('now') - julianday(updated_at)) * 86400 > 60"
+  ).all() as { id: string }[];
+  for (const entry of staleDispatching) {
+    db.prepare(
+      "UPDATE backlog SET status='queued', queue_order=COALESCE(queue_order, 0), updated_at=datetime('now') WHERE id=?"
+    ).run(entry.id);
+    logger.warn(`Stale 'dispatching' backlog entry reset to 'queued': ${entry.id}`);
+  }
+
   // Reset running stories that are abandoned — don't touch "done" stories
   // Don't increment retry_count for abandonment; only explicit failStep() counts against retries
   const abandonedStories = db.prepare(
