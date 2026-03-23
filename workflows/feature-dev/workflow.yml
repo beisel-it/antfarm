@@ -105,8 +105,10 @@ steps:
 
       Reply with:
       STATUS: done
+      REPO: {{repo}}
+      BRANCH: {{branch}}
       STORIES_JSON: [ ... array of story objects ... ]
-    expects: "STATUS: done, STORIES_JSON"
+    expects: "STATUS: done, REPO, BRANCH, STORIES_JSON"
     max_retries: 2
     on_fail:
       escalate_to: human
@@ -137,7 +139,7 @@ steps:
       TEST_CMD: <test command>
       CI_NOTES: <brief CI notes>
       BASELINE: <baseline status>
-    expects: "STATUS: done"
+    expects: "STATUS: done, BUILD_CMD, TEST_CMD, CI_NOTES, BASELINE"
     max_retries: 2
     on_fail:
       escalate_to: human
@@ -191,7 +193,7 @@ steps:
       STATUS: done
       CHANGES: what you implemented
       TESTS: what tests you wrote
-    expects: "STATUS: done"
+    expects: "STATUS: done, CHANGES, TESTS"
     max_retries: 2
     on_fail:
       escalate_to: human
@@ -384,4 +386,6 @@ steps:
       retry_step: implement
       max_retries: 3
       on_exhausted:
+        escalate_to: human
+   on_exhausted:
         escalate_to: human

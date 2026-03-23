@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
 import os from "node:os";
-import { extractRepoPath, isGitRepo, computeRepoLockKey, deriveBranchName } from "../../dist/installer/run.js";
+import { extractRepoPath, isGitRepo, computeRepoLockKey, deriveBranchName, resolveInitialRepoPath } from "../../dist/installer/run.js";
 
 describe("extractRepoPath", () => {
   it("should extract absolute path from task string", () => {
@@ -155,6 +155,23 @@ describe("computeRepoLockKey", () => {
     const key1 = computeRepoLockKey("/home/user/repo");
     const key2 = computeRepoLockKey("/home/user/repo2");
     assert.notStrictEqual(key1, key2);
+  });
+});
+
+describe("resolveInitialRepoPath", () => {
+  it("prefers the project repo when provided", () => {
+    const result = resolveInitialRepoPath("REPO: /tmp/not-used implement feature", "/home/florian/.openclaw/workspace/antfarm");
+    assert.strictEqual(result, "/home/florian/.openclaw/workspace/antfarm");
+  });
+
+  it("infers a valid git repo from the task title", () => {
+    const result = resolveInitialRepoPath("Implement feature in /home/florian/.openclaw/workspace/antfarm");
+    assert.strictEqual(result, "/home/florian/.openclaw/workspace/antfarm");
+  });
+
+  it("ignores inferred paths that are not git repos", () => {
+    const result = resolveInitialRepoPath("Implement feature in /tmp");
+    assert.strictEqual(result, undefined);
   });
 });
 
