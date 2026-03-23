@@ -22,14 +22,15 @@ test('GLOBAL_REFRESH_MS is set to 30000', () => {
   assert.ok(html.includes('const GLOBAL_REFRESH_MS = 30000'), 'GLOBAL_REFRESH_MS must equal 30000');
 });
 
-// ─── US-002: startOpenRunRefresh uses GLOBAL_REFRESH_MS ─────────────────────
+// ─── US-002: startOpenRunRefresh uses getAutorefreshMs() ─────────────────────
 
-test('startOpenRunRefresh uses GLOBAL_REFRESH_MS instead of hardcoded 5000', () => {
+test('startOpenRunRefresh uses getAutorefreshMs() instead of hardcoded 5000', () => {
   const startIdx = html.indexOf('function startOpenRunRefresh()');
   assert.ok(startIdx !== -1, 'startOpenRunRefresh function must exist');
   const endIdx = html.indexOf('\n}', startIdx);
   const fnBody = html.slice(startIdx, endIdx + 2);
-  assert.ok(fnBody.includes('GLOBAL_REFRESH_MS'), 'startOpenRunRefresh must reference GLOBAL_REFRESH_MS');
+  assert.ok(fnBody.includes('getAutorefreshMs()'), 'startOpenRunRefresh must reference getAutorefreshMs()');
+  assert.ok(!fnBody.includes('GLOBAL_REFRESH_MS'), 'startOpenRunRefresh setInterval must not reference GLOBAL_REFRESH_MS directly');
   assert.ok(!fnBody.includes('5000'), 'startOpenRunRefresh must not contain hardcoded 5000');
 });
 
