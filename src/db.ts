@@ -211,6 +211,14 @@ export interface BacklogEntry {
   id: string;
   title: string;
   description: string | null;
+  /**
+   * Valid statuses:
+   *   'pending'      — not yet queued
+   *   'queued'       — queued for auto-dispatch, waiting for an active run to finish
+   *   'dispatching'  — transient in-flight lock; CAS-claimed by advancePipeline before runWorkflow() is called.
+   *                    Must NOT be returned by getNextQueuedEntry(). Must be visible in list views.
+   *   'dispatched'   — runWorkflow() completed; entry is linked to a run_id
+   */
   status: string;
   priority: number;
   run_id: string | null;
