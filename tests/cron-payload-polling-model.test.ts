@@ -165,4 +165,36 @@ describe("cron payload includes polling model (regression #121)", () => {
     assert.equal(capturedJobs[0].payload.timeoutSeconds, 120,
       "cron payload should include timeoutSeconds from workflow polling config");
   });
+
+  it("polling prompt includes explicit worker runTimeoutSeconds from agent timeout", async () => {
+    const { setupAgentCrons } = await import("../dist/installer/agent-cron.js");
+
+    const fakeWorkflow = {
+      id: "test-worker-timeout",
+      name: "Test Worker Timeout",
+      version: 1,
+      polling: {
+        model: "openai-codex/gpt-5.3-codex",
+        timeoutSeconds: 120,
+      },
+      agents: [
+        {
+          id: "custom-agent",
+          name: "Custom Agent",
+          timeoutSeconds: 2400,
+          workspace: { baseDir: "agents/custom", files: {} },
+        },
+      ],
+      steps: [
+        { id: "st", agent: "custom-agent", input: "work", expects: "R" },
+      ],
+    };
+
+    await setupAgentCrons(fakeWorkflow as any);
+
+    assert.ok(
+      capturedJobs[0].payload.message.includes("runTimeoutSeconds: 2400"),
+      "polling prompt should pass explicit worker runTimeoutSeconds through sessions_spawn"
+    );
+  });
 });

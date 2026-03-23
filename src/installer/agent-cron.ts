@@ -3,6 +3,7 @@ import type { WorkflowSpec } from "./types.js";
 import { resolveAntfarmCli } from "./paths.js";
 import { getDb } from "../db.js";
 import { readOpenClawConfig } from "./openclaw-config.js";
+import { getRoleTimeoutSeconds, inferRole } from "./install.js";
 
 const DEFAULT_EVERY_MS = 300_000; // 5 minutes
 const DEFAULT_AGENT_TIMEOUT_SECONDS = 30 * 60; // 30 minutes
@@ -112,6 +113,7 @@ The workflow cannot advance until you report. Your session ending without report
 
 const DEFAULT_POLLING_TIMEOUT_SECONDS = 7200;
 const DEFAULT_POLLING_MODEL = "openai-codex/gpt-5.1-codex-max";
+const DEFAULT_WORK_RUN_TIMEOUT_SECONDS = 1800;
 
 function extractModel(value: unknown): string | undefined {
   if (!value) return undefined;
@@ -147,7 +149,19 @@ async function resolveAgentCronModel(agentId: string, requestedModel?: string): 
   return requestedModel;
 }
 
-export function buildPollingPrompt(workflowId: string, agentId: string, workModel?: string): string {
+function resolveWorkRunTimeoutSeconds(agent: Pick<WorkflowSpec["agents"][number], "id" | "role" | "timeoutSeconds">): number {
+  if (typeof agent.timeoutSeconds === "number") return agent.timeoutSeconds;
+  if (agent.role) return getRoleTimeoutSeconds(agent.role);
+  if (agent.id) return getRoleTimeoutSeconds(inferRole(agent.id));
+  return DEFAULT_WORK_RUN_TIMEOUT_SECONDS;
+}
+
+export function buildPollingPrompt(
+  workflowId: string,
+  agentId: string,
+  workModel?: string,
+  workRunTimeoutSeconds = DEFAULT_WORK_RUN_TIMEOUT_SECONDS,
+): string {
   const fullAgentId = `${workflowId}_${agentId}`;
   const cli = resolveAntfarmCli();
   const model = workModel ?? "default";
@@ -169,6 +183,7 @@ If JSON is returned, parse it to extract stepId, runId, and input fields.
 Then call sessions_spawn with these parameters:
 - agentId: "${fullAgentId}"
 - model: "${model}"
+- runTimeoutSeconds: ${workRunTimeoutSeconds}
 - task: The full work prompt below, followed by "\\n\\nCLAIMED STEP JSON:\\n" and the exact JSON output from step claim.
 
 Immediately after calling sessions_spawn, check whether the session was spawned successfully. If sessions_spawn returns an error or does not return a session ID, retry the call up to three times before giving up.
@@ -201,7 +216,8 @@ export async function setupAgentCrons(workflow: WorkflowSpec): Promise<void> {
     const pollingModel = await resolveAgentCronModel(agentId, requestedPollingModel);
     const requestedWorkModel = agent.model ?? workflowPollingModel;
     const workModel = await resolveAgentCronModel(agentId, requestedWorkModel);
-    const prompt = buildPollingPrompt(workflow.id, agent.id, workModel);
+    const workRunTimeoutSeconds = resolveWorkRunTimeoutSeconds(agent);
+    const prompt = buildPollingPrompt(workflow.id, agent.id, workModel, workRunTimeoutSeconds);
     const timeoutSeconds = workflowPollingTimeout;
 
     const result = await createAgentCronJob({
