@@ -1105,7 +1105,11 @@ function renderBacklogColumn() {
         const btnLabel = isDispatched ? 'Dispatched ✓' : 'Dispatch';
         const dispatchDisabled = isDispatched || hasActiveRun || isQueued ? 'disabled' : '';
         const dispatchClass = (hasActiveRun || isQueued) && !isDispatched ? 'backlog-dispatch-btn backlog-dispatch-btn--blocked' : 'backlog-dispatch-btn';
-        const dispatchTitle = hasActiveRun ? 'title="Project run already in flight"' : '';
+        const dispatchTitle = hasActiveRun
+          ? 'title="Project run already in flight"'
+          : isQueued
+            ? 'title="Entry is queued — will dispatch automatically"'
+            : '';
         const queueBtnHTML = (hasActiveRun && !isDispatched && !isQueued)
           ? `<button class="backlog-queue-btn" onclick="event.stopPropagation();queueBacklogEntry('${entry.id}',this)">Queue</button>`
           : '';
