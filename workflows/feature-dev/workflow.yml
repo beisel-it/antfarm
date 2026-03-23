@@ -10,8 +10,8 @@ description: |
   Then integration/E2E testing, PR creation, and code review.
 
 polling:
-  model: default
-  timeoutSeconds: 120
+  model: openai-codex/gpt-5.1-codex-max
+  timeoutSeconds: 7200
 
 agents:
   - id: planner
@@ -106,7 +106,7 @@ steps:
       Reply with:
       STATUS: done
       STORIES_JSON: [ ... array of story objects ... ]
-    expects: "STATUS: done"
+    expects: "STATUS: done, STORIES_JSON"
     max_retries: 2
     on_fail:
       escalate_to: human

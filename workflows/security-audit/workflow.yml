@@ -9,8 +9,8 @@ description: |
   Verifier confirms each fix. Tester runs final integration validation. PR agent creates the pull request.
 
 polling:
-  model: default
-  timeoutSeconds: 120
+  model: openai-codex/gpt-5.1-codex-max
+  timeoutSeconds: 7200
 
 agents:
   - id: scanner

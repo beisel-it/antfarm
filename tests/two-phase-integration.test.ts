@@ -89,11 +89,13 @@ describe("two-phase-integration", () => {
       assert.ok(prompt.includes("stuck forever"));
     });
 
-    it("contains all 3 rules", () => {
+    it("contains wrapper precedence and validation rules", () => {
       const prompt = buildWorkPrompt("feature-dev", "developer");
       assert.ok(prompt.includes("NEVER end your session"));
       assert.ok(prompt.includes("Write output to a file first"));
-      assert.ok(prompt.includes("step fail with an explanation"));
+      assert.ok(prompt.includes("Step-specific schema in the input overrides generic wrapper templates."));
+      assert.ok(prompt.includes("Wrapper examples are fallback guidance only; the claimed step input is the source of truth"));
+      assert.ok(prompt.includes("If required keys are missing, malformed, or unparseable, call step fail"));
     });
 
     it("does NOT contain step claim (Phase 1 handles claiming)", () => {

@@ -9,8 +9,8 @@ description: |
   PR agent creates the pull request.
 
 polling:
-  model: default
-  timeoutSeconds: 120
+  model: openai-codex/gpt-5.1-codex-max
+  timeoutSeconds: 7200
 
 agents:
   - id: triager

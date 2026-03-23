@@ -56,6 +56,22 @@ export function parseOutputKeyValues(output: string): Record<string, string> {
   return result;
 }
 
+function extractSpecialKeyBlock(output: string, key: string): string | null {
+  const lines = output.split("\n");
+  const prefix = `${key}:`;
+  const startIdx = lines.findIndex(line => line.startsWith(prefix));
+  if (startIdx === -1) return null;
+
+  const firstLine = lines[startIdx].slice(prefix.length).trim();
+  const valueLines = [firstLine];
+  for (let i = startIdx + 1; i < lines.length; i++) {
+    if (/^[A-Z_]+:\s/.test(lines[i])) break;
+    valueLines.push(lines[i]);
+  }
+
+  return valueLines.join("\n").trim();
+}
+
 /**
  * Validate that step output contains all required keys specified in expects.
  * Throws an error if any required keys are missing.
@@ -69,15 +85,44 @@ function validateStepOutput(expects: string, output: string): void {
 
   // Parse actual output keys
   const actualKeys = parseOutputKeyValues(output);
+  const missingKeys: string[] = [];
+  const parseErrors: string[] = [];
 
-  // Check each expected key is present
-  const missingKeys = expectedKeys.filter(key => !actualKeys.hasOwnProperty(key));
+  for (const key of expectedKeys) {
+    if (key === "stories_json") {
+      const rawStories = extractSpecialKeyBlock(output, "STORIES_JSON");
+      if (!rawStories) {
+        missingKeys.push(key);
+        continue;
+      }
+      try {
+        const parsedStories = JSON.parse(rawStories);
+        if (!Array.isArray(parsedStories)) {
+          parseErrors.push("stories_json must be a valid JSON array");
+        }
+      } catch (err) {
+        parseErrors.push(`stories_json is not parseable JSON: ${(err as Error).message}`);
+      }
+      continue;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(actualKeys, key)) {
+      missingKeys.push(key);
+    }
+  }
 
   if (missingKeys.length > 0) {
     throw new Error(
       `Step output missing required keys: ${missingKeys.join(", ")}. ` +
       `Expected keys from 'expects': ${expects}. ` +
       `Add these keys to your output before completing the step.`
+    );
+  }
+
+  if (parseErrors.length > 0) {
+    throw new Error(
+      `Step output has malformed required keys: ${parseErrors.join("; ")}. ` +
+      `Expected keys from 'expects': ${expects}.`
     );
   }
 }
@@ -245,19 +290,8 @@ function formatCompletedStories(stories: Story[]): string {
  * Parse STORIES_JSON from step output and insert stories into the DB.
  */
 function parseAndInsertStories(output: string, runId: string): void {
-  const lines = output.split("\n");
-  const startIdx = lines.findIndex(l => l.startsWith("STORIES_JSON:"));
-  if (startIdx === -1) return;
-
-  // Collect JSON text: first line after prefix, then subsequent lines until next KEY: or end
-  const firstLine = lines[startIdx].slice("STORIES_JSON:".length).trim();
-  const jsonLines = [firstLine];
-  for (let i = startIdx + 1; i < lines.length; i++) {
-    if (/^[A-Z_]+:\s/.test(lines[i])) break;
-    jsonLines.push(lines[i]);
-  }
-
-  const jsonText = jsonLines.join("\n").trim();
+  const jsonText = extractSpecialKeyBlock(output, "STORIES_JSON");
+  if (!jsonText) return;
   let stories: any[];
   try {
     stories = JSON.parse(jsonText);

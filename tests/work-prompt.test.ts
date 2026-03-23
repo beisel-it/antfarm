@@ -40,4 +40,21 @@ describe("buildWorkPrompt", () => {
     assert.ok(!p1.includes("step claim"));
     assert.ok(!p2.includes("step claim"));
   });
+
+  it("states that step-specific schema overrides wrapper templates", () => {
+    const prompt = buildWorkPrompt("feature-dev", "developer");
+    assert.ok(prompt.includes("Step-specific schema in the input overrides generic wrapper templates."));
+    assert.ok(prompt.includes("Use the agent step's required output contract."));
+  });
+
+  it("marks the heredoc payload as example-only fallback guidance", () => {
+    const prompt = buildWorkPrompt("feature-dev", "developer");
+    assert.ok(prompt.includes("Example completion format only."));
+    assert.ok(prompt.includes("Use this only when no schema is provided by the input."));
+  });
+
+  it("includes the planner-specific STORIES_JSON reminder", () => {
+    const prompt = buildWorkPrompt("feature-dev", "planner");
+    assert.ok(prompt.includes("For feature-dev_planner, completion must carry STORIES_JSON exactly as valid JSON array."));
+  });
 });
