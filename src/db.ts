@@ -188,6 +188,13 @@ function migrate(db: DatabaseSync): void {
 
   // Backfill: normalize legacy 'completed' status to 'done' (idempotent)
   db.exec("UPDATE runs SET status = 'done' WHERE status = 'completed'");
+
+  // Unique partial index: prevent two backlog entries in the same project+workflow from being 'dispatched' simultaneously
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_backlog_one_dispatched_per_project
+    ON backlog (project_id, workflow_id)
+    WHERE status = 'dispatched' AND project_id IS NOT NULL
+  `);
 }
 
 export function nextRunNumber(): number {

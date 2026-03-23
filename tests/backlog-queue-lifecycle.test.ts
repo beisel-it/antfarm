@@ -83,6 +83,14 @@ function simulateAutoDispatch(
 
   if (!completedRun?.project_id) return null;
 
+  // Mirror real advancePipeline: delete (or clear) the completed run's backlog entry
+  // before dispatching the next, so the unique index isn't violated.
+  const dispatchDb = getDb();
+  const completedBacklog = dispatchDb.prepare("SELECT id FROM backlog WHERE run_id = ?").get(runId) as { id: string } | undefined;
+  if (completedBacklog) {
+    dispatchDb.prepare("DELETE FROM backlog WHERE id = ?").run(completedBacklog.id);
+  }
+
   const nextQueued = getNextQueuedEntry(completedRun.project_id, completedRun.workflow_id);
   if (!nextQueued) return null;
 
