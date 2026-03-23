@@ -5,3 +5,4 @@ import path from "node:path";
 
 const testDb = path.join(os.tmpdir(), `antfarm-test-${process.pid}.db`);
 process.env.ANTFARM_DB_PATH = testDb;
+process.env.ANTFARM_SKIP_CRON = '1'; // Prevent tests from creating real cron jobs in the production gateway
