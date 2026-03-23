@@ -26,6 +26,67 @@ export function getDb(): DatabaseSync {
   return _db;
 }
 
+function dedupeStoriesForRunStoryUniqueIndex(db: DatabaseSync): void {
+  db.exec(`
+    DELETE FROM stories
+    WHERE id IN (
+      SELECT doomed.id
+      FROM stories AS doomed
+      JOIN stories AS keeper
+        ON keeper.run_id = doomed.run_id
+       AND keeper.story_id = doomed.story_id
+       AND (
+         CASE keeper.status
+           WHEN 'running' THEN 4
+           WHEN 'done' THEN 3
+           WHEN 'pending' THEN 2
+           WHEN 'failed' THEN 1
+           ELSE 0
+         END > CASE doomed.status
+           WHEN 'running' THEN 4
+           WHEN 'done' THEN 3
+           WHEN 'pending' THEN 2
+           WHEN 'failed' THEN 1
+           ELSE 0
+         END
+         OR (
+           CASE keeper.status
+             WHEN 'running' THEN 4
+             WHEN 'done' THEN 3
+             WHEN 'pending' THEN 2
+             WHEN 'failed' THEN 1
+             ELSE 0
+           END = CASE doomed.status
+             WHEN 'running' THEN 4
+             WHEN 'done' THEN 3
+             WHEN 'pending' THEN 2
+             WHEN 'failed' THEN 1
+             ELSE 0
+           END
+           AND COALESCE(keeper.updated_at, keeper.created_at, '') > COALESCE(doomed.updated_at, doomed.created_at, '')
+         )
+         OR (
+           CASE keeper.status
+             WHEN 'running' THEN 4
+             WHEN 'done' THEN 3
+             WHEN 'pending' THEN 2
+             WHEN 'failed' THEN 1
+             ELSE 0
+           END = CASE doomed.status
+             WHEN 'running' THEN 4
+             WHEN 'done' THEN 3
+             WHEN 'pending' THEN 2
+             WHEN 'failed' THEN 1
+             ELSE 0
+           END
+           AND COALESCE(keeper.updated_at, keeper.created_at, '') = COALESCE(doomed.updated_at, doomed.created_at, '')
+           AND keeper.id > doomed.id
+         )
+       )
+    )
+  `);
+}
+
 function migrate(db: DatabaseSync): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS runs (
@@ -166,6 +227,12 @@ function migrate(db: DatabaseSync): void {
   if (!storyColNames.has("finished_at")) {
     db.exec("ALTER TABLE stories ADD COLUMN finished_at TEXT");
   }
+
+  dedupeStoriesForRunStoryUniqueIndex(db);
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_stories_run_id_story_id
+    ON stories (run_id, story_id)
+  `);
 
   // Add columns to runs table for backwards compat
   const runCols = db.prepare("PRAGMA table_info(runs)").all() as Array<{ name: string }>;

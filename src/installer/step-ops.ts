@@ -309,7 +309,7 @@ function parseAndInsertStories(output: string, runId: string): void {
   const db = getDb();
   const now = new Date().toISOString();
   const insert = db.prepare(
-    "INSERT INTO stories (id, run_id, story_index, story_id, title, description, acceptance_criteria, status, retry_count, max_retries, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 0, 2, ?, ?)"
+    "INSERT OR IGNORE INTO stories (id, run_id, story_index, story_id, title, description, acceptance_criteria, status, retry_count, max_retries, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 0, 2, ?, ?)"
   );
 
   const seenIds = new Set<string>();
@@ -817,10 +817,14 @@ export function completeStep(stepId: string, output: string): { advanced: boolea
   const db = getDb();
 
   const step = db.prepare(
-    "SELECT id, run_id, step_id, step_index, type, loop_config, current_story_id, expects, session_key FROM steps WHERE id = ?"
-  ).get(stepId) as { id: string; run_id: string; step_id: string; step_index: number; type: string; loop_config: string | null; current_story_id: string | null; expects: string; session_key: string | null } | undefined;
+    "SELECT id, run_id, step_id, step_index, type, loop_config, current_story_id, expects, session_key, status FROM steps WHERE id = ?"
+  ).get(stepId) as { id: string; run_id: string; step_id: string; step_index: number; type: string; loop_config: string | null; current_story_id: string | null; expects: string; session_key: string | null; status: string } | undefined;
 
   if (!step) throw new Error(`Step not found: ${stepId}`);
+
+  if (step.status === "done" || step.status === "failed") {
+    return { advanced: false, runCompleted: false };
+  }
 
   // Validate expected output keys before processing
   validateStepOutput(step.expects, output);

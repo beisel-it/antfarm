@@ -63,4 +63,30 @@ describe("step output validation", () => {
     assert.equal(stories[0]?.story_id, "S-1");
     assert.equal(stories[0]?.title, "Add guard");
   });
+
+  it("does not insert duplicate stories when planner completion is replayed", () => {
+    const db = getDb();
+    const { runId, stepId } = seedRunningStep("STATUS: done, STORIES_JSON");
+    const output = [
+      "STATUS: done",
+      "STORIES_JSON: [",
+      '  {"id":"S-1","title":"Add guard","description":"Tighten validation","acceptanceCriteria":["Typecheck passes"]}',
+      '  ,{"id":"S-2","title":"Add tests","description":"Cover the path","acceptanceCriteria":["Tests pass"]}',
+      "]",
+    ].join("\n");
+
+    completeStep(stepId, output);
+    completeStep(stepId, output);
+
+    const stories = db.prepare(
+      "SELECT story_id, title, status FROM stories WHERE run_id = ? ORDER BY story_index ASC"
+    ).all(runId) as { story_id: string; title: string; status: string }[];
+    assert.deepEqual(
+      stories.map((story) => story.story_id),
+      ["S-1", "S-2"],
+    );
+
+    const step = db.prepare("SELECT status FROM steps WHERE id = ?").get(stepId) as { status: string };
+    assert.equal(step.status, "done");
+  });
 });
