@@ -471,6 +471,13 @@ select:focus{outline:none;border-color:#8ECFC0}
     <span id="medic-label">Medic</span>
   </div>
   <span class="refresh-note" id="refresh-note">Auto-refresh: 30s</span>
+  <select id="refresh-interval-select" aria-label="Auto-refresh interval">
+    <option value="0">Off</option>
+    <option value="10000">10s</option>
+    <option value="30000" selected>30s</option>
+    <option value="60000">1min</option>
+    <option value="300000">5min</option>
+  </select>
   <span id="last-refreshed">Last refresh: —</span>
   <span id="next-refresh">Next: 30s</span>
 </footer>
@@ -1714,6 +1721,15 @@ async function loadStories(runId) {
 
 document.getElementById('wf-select').addEventListener('change', e => selectWorkflow(e.target.value));
 initStatusFilterButtons();
+
+const refreshIntervalSelect = document.getElementById('refresh-interval-select');
+if (refreshIntervalSelect) {
+  const autorefreshMs = getAutorefreshMs();
+  const selectedValue = String(autorefreshMs);
+  const hasMatchingOption = !!refreshIntervalSelect.querySelector(`option[value="${selectedValue}"]`);
+  refreshIntervalSelect.value = hasMatchingOption ? selectedValue : String(GLOBAL_REFRESH_MS);
+}
+
 document.getElementById('refresh-note').textContent = `Auto-refresh: ${Math.floor(GLOBAL_REFRESH_MS / 1000)}s`;
 loadWorkflows();
 loadProjects().then(() => {
