@@ -804,6 +804,7 @@ export function completeStep(stepId: string, output: string): { advanced: boolea
   // Parse KEY: value lines and merge into context
   const parsed = parseOutputKeyValues(output);
   for (const [key, value] of Object.entries(parsed)) {
+    if ((key === "repo" || key === "branch") && context[key]) continue;
     context[key] = value;
   }
 

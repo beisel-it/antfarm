@@ -97,8 +97,6 @@ steps:
 
       Reply with:
       STATUS: done
-      REPO: /path/to/repo
-      BRANCH: bugfix-branch-name
       SEVERITY: critical|high|medium|low
       AFFECTED_AREA: what files/modules are affected
       REPRODUCTION: how to reproduce the bug
@@ -147,7 +145,7 @@ steps:
 
       Instructions:
       1. cd into the repo
-      2. Create the bugfix branch (git checkout -b {{branch}} from main)
+      2. Reuse or create the bugfix branch (git checkout {{branch}} 2>/dev/null || git checkout -b {{branch}})
       3. Read package.json, CI config, test config to understand build/test setup
       4. Ensure .gitignore exists — if missing, create one appropriate for the detected stack (must include .env, node_modules/, *.key, *.pem at minimum)
       5. Run the build to establish a baseline

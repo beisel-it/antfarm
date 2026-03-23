@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { getDb } from "../db.js";
 import { resolveBundledWorkflowsDir } from "../installer/paths.js";
+import { resolveWorkflowDir } from "../installer/paths.js";
 import {
   listBacklogEntries,
   addBacklogEntry,
@@ -24,6 +25,8 @@ import {
 } from "../projects/index.js";
 import YAML from "yaml";
 import { runWorkflow, getActiveRunForProject } from "../installer/run.js";
+import { ensureWorkflowCrons } from "../installer/agent-cron.js";
+import { loadWorkflowSpec } from "../installer/workflow-spec.js";
 
 import type { RunInfo, StepInfo } from "../installer/status.js";
 import { stopWorkflow } from "../installer/status.js";
@@ -33,6 +36,7 @@ export type { LoopGroup };
 export { computeLoopGroups };
 import { getRunEvents } from "../installer/events.js";
 import { getMedicStatus, getRecentMedicChecks } from "../medic/medic.js";
+import type { WorkflowSpec } from "../installer/types.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -133,6 +137,47 @@ function findBacklogEntryById(id: string) {
 interface DashboardDeps {
   runWorkflow?: typeof runWorkflow;
   getActiveRunForProject?: typeof getActiveRunForProject;
+  ensureWorkflowCrons?: (workflow: WorkflowSpec) => Promise<void>;
+}
+
+async function ensureCronsForRun(runId: string, deps: Pick<DashboardDeps, "ensureWorkflowCrons"> = {}): Promise<void> {
+  const db = getDb();
+  const run = db.prepare("SELECT workflow_id FROM runs WHERE id = ?").get(runId) as { workflow_id: string } | undefined;
+  if (!run) {
+    throw new Error("run not found");
+  }
+  const workflow = await loadWorkflowSpec(resolveWorkflowDir(run.workflow_id));
+  const ensureWorkflowCronsImpl = deps.ensureWorkflowCrons ?? ensureWorkflowCrons;
+  await ensureWorkflowCronsImpl(workflow);
+}
+
+export async function retryRunStep(
+  runId: string,
+  stepId: string,
+  deps: Pick<DashboardDeps, "ensureWorkflowCrons"> = {},
+): Promise<boolean> {
+  const db = getDb();
+  const step = db.prepare("SELECT id FROM steps WHERE id = ? AND run_id = ?").get(stepId, runId);
+  if (!step) return false;
+  await ensureCronsForRun(runId, deps);
+  db.prepare("UPDATE steps SET status = 'pending', retry_count = 0, output = NULL, updated_at = datetime('now') WHERE id = ?").run(stepId);
+  db.prepare("UPDATE runs SET status = 'running', updated_at = datetime('now') WHERE id = ? AND status = 'failed'").run(runId);
+  return true;
+}
+
+export async function retryRunStory(
+  runId: string,
+  storyId: string,
+  deps: Pick<DashboardDeps, "ensureWorkflowCrons"> = {},
+): Promise<boolean> {
+  const db = getDb();
+  const story = db.prepare("SELECT id FROM stories WHERE id = ? AND run_id = ?").get(storyId, runId);
+  if (!story) return false;
+  await ensureCronsForRun(runId, deps);
+  db.prepare("UPDATE stories SET status = 'pending', retry_count = 0, updated_at = datetime('now') WHERE id = ?").run(storyId);
+  db.prepare("UPDATE steps SET status = 'pending', current_story_id = NULL, updated_at = datetime('now') WHERE run_id = ? AND type = 'loop' AND status = 'failed'").run(runId);
+  db.prepare("UPDATE runs SET status = 'running', updated_at = datetime('now') WHERE id = ? AND status = 'failed'").run(runId);
+  return true;
 }
 
 export function startDashboard(port = 3333, deps: DashboardDeps = {}): http.Server {
@@ -163,24 +208,27 @@ export function startDashboard(port = 3333, deps: DashboardDeps = {}): http.Serv
     const stepRetryMatch = p.match(/^\/api\/runs\/([^/]+)\/steps\/([^/]+)\/retry$/);
     if (stepRetryMatch && req.method === "POST") {
       const [, runId, stepId] = stepRetryMatch;
-      const db = getDb();
-      const step = db.prepare("SELECT id FROM steps WHERE id = ? AND run_id = ?").get(stepId, runId);
-      if (!step) return json(res, { error: "not found" }, 404);
-      db.prepare("UPDATE steps SET status = 'pending', retry_count = 0, output = NULL, updated_at = datetime('now') WHERE id = ?").run(stepId);
-      db.prepare("UPDATE runs SET status = 'running', updated_at = datetime('now') WHERE id = ? AND status = 'failed'").run(runId);
-      return json(res, { ok: true });
+      retryRunStep(runId, stepId, deps).then((ok) => {
+        if (!ok) return json(res, { error: "not found" }, 404);
+        return json(res, { ok: true });
+      }).catch((err) => {
+        const message = err instanceof Error ? err.message : String(err);
+        return json(res, { error: `failed to ensure workflow crons: ${message}` }, 500);
+      });
+      return;
     }
 
     const storyRetryMatch = p.match(/^\/api\/runs\/([^/]+)\/stories\/([^/]+)\/retry$/);
     if (storyRetryMatch && req.method === "POST") {
       const [, runId, storyId] = storyRetryMatch;
-      const db = getDb();
-      const story = db.prepare("SELECT id FROM stories WHERE id = ? AND run_id = ?").get(storyId, runId);
-      if (!story) return json(res, { error: "not found" }, 404);
-      db.prepare("UPDATE stories SET status = 'pending', retry_count = 0, updated_at = datetime('now') WHERE id = ?").run(storyId);
-      db.prepare("UPDATE steps SET status = 'pending', current_story_id = NULL, updated_at = datetime('now') WHERE run_id = ? AND type = 'loop' AND status = 'failed'").run(runId);
-      db.prepare("UPDATE runs SET status = 'running', updated_at = datetime('now') WHERE id = ? AND status = 'failed'").run(runId);
-      return json(res, { ok: true });
+      retryRunStory(runId, storyId, deps).then((ok) => {
+        if (!ok) return json(res, { error: "not found" }, 404);
+        return json(res, { ok: true });
+      }).catch((err) => {
+        const message = err instanceof Error ? err.message : String(err);
+        return json(res, { error: `failed to ensure workflow crons: ${message}` }, 500);
+      });
+      return;
     }
 
     const cancelMatch = p.match(/^\/api\/runs\/([^/]+)\/cancel$/);

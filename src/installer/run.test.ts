@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
 import os from "node:os";
-import { extractRepoPath, isGitRepo, computeRepoLockKey } from "../../dist/installer/run.js";
+import { extractRepoPath, isGitRepo, computeRepoLockKey, deriveBranchName } from "../../dist/installer/run.js";
 
 describe("extractRepoPath", () => {
   it("should extract absolute path from task string", () => {
@@ -155,5 +155,28 @@ describe("computeRepoLockKey", () => {
     const key1 = computeRepoLockKey("/home/user/repo");
     const key2 = computeRepoLockKey("/home/user/repo2");
     assert.notStrictEqual(key1, key2);
+  });
+});
+
+describe("deriveBranchName", () => {
+  it("uses a workflow-specific feature prefix", () => {
+    const branch = deriveBranchName("feature-dev", "Add queue support");
+    assert.match(branch, /^feature\/add-queue-support-[0-9a-f]{8}$/);
+  });
+
+  it("uses a workflow-specific bugfix prefix", () => {
+    const branch = deriveBranchName("bug-fix", "Fix null pointer on login");
+    assert.match(branch, /^bugfix\/fix-null-pointer-on-login-[0-9a-f]{8}$/);
+  });
+
+  it("is deterministic for the same workflow and task", () => {
+    const a = deriveBranchName("feature-dev", "Same task");
+    const b = deriveBranchName("feature-dev", "Same task");
+    assert.strictEqual(a, b);
+  });
+
+  it("falls back to a slugged workflow id for unknown workflows", () => {
+    const branch = deriveBranchName("ops-config", "Rotate deploy key");
+    assert.match(branch, /^ops-config\/rotate-deploy-key-[0-9a-f]{8}$/);
   });
 });

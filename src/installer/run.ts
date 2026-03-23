@@ -4,6 +4,7 @@ import os from "node:os";
 import { loadWorkflowSpec } from "./workflow-spec.js";
 import { resolveWorkflowDir } from "./paths.js";
 import { getDb, nextRunNumber } from "../db.js";
+import { getProject } from "../projects/ops.js";
 import { logger } from "../lib/logger.js";
 import { ensureWorkflowCrons } from "./agent-cron.js";
 import { emitEvent } from "./events.js";
@@ -143,11 +144,18 @@ export async function runWorkflow(params: {
   const now = new Date().toISOString();
   const runId = crypto.randomUUID();
   const runNumber = nextRunNumber();
+  const project = params.projectId ? getProject(params.projectId) : null;
 
   const initialContext: Record<string, string> = {
     task: params.taskTitle,
     ...workflow.context,
   };
+  if (project?.git_repo_path) {
+    initialContext["repo"] = project.git_repo_path;
+  }
+  if (!initialContext["branch"] && project?.git_repo_path) {
+    initialContext["branch"] = deriveBranchName(workflow.id, params.taskTitle);
+  }
 
   db.exec("BEGIN");
   try {
@@ -262,4 +270,30 @@ export function isGitRepo(repoPath: string): boolean {
  */
 export function computeRepoLockKey(repoPath: string): string {
   return crypto.createHash("sha256").update(repoPath).digest("hex").slice(0, 16);
+}
+
+function slugifyBranchPart(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-+/g, "-");
+}
+
+function branchPrefixForWorkflow(workflowId: string): string {
+  switch (workflowId) {
+    case "feature-dev":
+      return "feature";
+    case "bug-fix":
+      return "bugfix";
+    default:
+      return slugifyBranchPart(workflowId) || "work";
+  }
+}
+
+export function deriveBranchName(workflowId: string, taskTitle: string): string {
+  const firstLine = taskTitle.split("\n")[0]?.trim() ?? "";
+  const slug = slugifyBranchPart(firstLine).slice(0, 48) || "task";
+  const fingerprint = crypto.createHash("sha256").update(`${workflowId}\n${firstLine}`).digest("hex").slice(0, 8);
+  return `${branchPrefixForWorkflow(workflowId)}/${slug}-${fingerprint}`;
 }
