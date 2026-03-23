@@ -154,7 +154,7 @@ export function queueBacklogEntry(id: string, opts: { workflowId: string }): Bac
   if (!entry) {
     throw new Error(`Backlog entry not found: ${id}`);
   }
-  if (entry.status === 'dispatched') {
+  if (entry.status === 'dispatched' || entry.status === 'dispatching') {
     throw new Error(`Backlog entry is already dispatched and cannot be queued: ${id}`);
   }
 

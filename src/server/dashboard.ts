@@ -308,7 +308,7 @@ export function startDashboard(port = 3333, deps: DashboardDeps = {}): http.Serv
       const id = backlogQueueMatch[1];
       const entry = findBacklogEntryById(id);
       if (!entry) return json(res, { error: "not found" }, 404);
-      if (entry.status === "dispatched") return json(res, { error: "already dispatched" }, 409);
+      if (entry.status === "dispatched" || entry.status === "dispatching") return json(res, { error: "already dispatched" }, 409);
       if (!entry.project_id) return json(res, { error: "entry has no project — queue requires a project" }, 400);
       return readBody(req, (body) => {
         try {

@@ -1087,23 +1087,58 @@ function advancePipeline(runId: string): { advanced: boolean; runCompleted: bool
     } catch (err) {
       logger.warn(`Failed to delete backlog entry for completed run: ${String(err)}`, { runId });
     }
-    // Auto-dispatch next queued backlog entry if one exists for this project+workflow
+    // Auto-dispatch next queued backlog entry if one exists for this project+workflow.
+    // Uses BEGIN IMMEDIATE to atomically claim the next queued entry — prevents race
+    // conditions when two concurrent callers both see a queued entry and double-dispatch.
     const completedRun = db.prepare("SELECT project_id, workflow_id FROM runs WHERE id = ?").get(runId) as { project_id: string | null; workflow_id: string } | undefined;
     if (completedRun?.project_id) {
       const projectId = completedRun.project_id;
       const workflowId = completedRun.workflow_id;
-      const nextQueued = getNextQueuedEntry(projectId, workflowId);
-      if (nextQueued) {
-        const backlogId = nextQueued.id;
+
+      // Atomic CAS: SELECT + UPDATE inside BEGIN IMMEDIATE transaction
+      let claimedEntry: { id: string; title: string } | null = null;
+      try {
+        db.exec("BEGIN IMMEDIATE");
+        const candidateRow = db.prepare(
+          "SELECT id, title FROM backlog WHERE project_id = ? AND workflow_id = ? AND status = 'queued' ORDER BY queue_order ASC, created_at ASC LIMIT 1"
+        ).get(projectId, workflowId) as { id: string; title: string } | undefined;
+
+        if (candidateRow) {
+          const now = new Date().toISOString();
+          const updateResult = db.prepare(
+            "UPDATE backlog SET status = 'dispatching', updated_at = ? WHERE id = ? AND status = 'queued'"
+          ).run(now, candidateRow.id) as { changes: number };
+
+          if (updateResult.changes > 0) {
+            // We atomically claimed this entry
+            claimedEntry = { id: candidateRow.id, title: candidateRow.title };
+          }
+          // If changes === 0, another caller got it first — abort silently
+        }
+        db.exec("COMMIT");
+      } catch (txErr) {
+        try { db.exec("ROLLBACK"); } catch {}
+        logger.warn(`Auto-dispatch transaction failed (non-fatal): ${String(txErr)}`, { runId });
+      }
+
+      if (claimedEntry) {
+        const backlogId = claimedEntry.id;
+        const taskTitle = claimedEntry.title;
         runWorkflow({
           workflowId,
-          taskTitle: nextQueued.title,
+          taskTitle,
           projectId,
         }).then((newRun) => {
           updateBacklogEntry(backlogId, { status: "dispatched", run_id: newRun.id, queue_order: null });
           logger.info("Auto-dispatched queued backlog entry", { runId: newRun.id });
         }).catch((err: unknown) => {
-          logger.warn(`Auto-dispatch of queued backlog entry failed (non-fatal): ${String(err)}`, { runId });
+          // runWorkflow failed — reset to 'queued' so it can be retried
+          try {
+            updateBacklogEntry(backlogId, { status: "queued" });
+            logger.warn(`Auto-dispatch failed, reset to queued: ${String(err)}`, { runId });
+          } catch (resetErr) {
+            logger.warn(`Auto-dispatch failed AND reset failed: ${String(resetErr)}`, { runId });
+          }
         });
       }
     }
