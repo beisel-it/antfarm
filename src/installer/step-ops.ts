@@ -1047,8 +1047,9 @@ function checkLoopContinuation(runId: string, loopStepId: string): { advanced: b
 /**
  * Advance the pipeline: find the next waiting step and make it pending, or complete the run.
  * Respects terminal run states — a failed run cannot be advanced or completed.
+ * Exported for testing only.
  */
-function advancePipeline(runId: string): { advanced: boolean; runCompleted: boolean } {
+export function advancePipeline(runId: string): { advanced: boolean; runCompleted: boolean } {
   const db = getDb();
 
   // Guard: don't advance or complete a run that's already failed/cancelled
