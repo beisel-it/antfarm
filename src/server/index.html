@@ -506,6 +506,27 @@ function saveStatusFilters() {
   localStorage.setItem(STATUS_FILTER_KEY, JSON.stringify(activeStatuses));
 }
 
+// ── Autorefresh interval ─────────────────────────────────────────
+const AUTOREFRESH_STORAGE_KEY = 'antfarm-autorefresh-ms';
+const AUTOREFRESH_MIN_MS = 5000;
+
+function getAutorefreshMs() {
+  try {
+    const stored = localStorage.getItem(AUTOREFRESH_STORAGE_KEY);
+    if (stored !== null) {
+      const value = Number(stored);
+      if (!isNaN(value)) {
+        return Math.max(AUTOREFRESH_MIN_MS, value);
+      }
+    }
+  } catch { /* ignore */ }
+  return GLOBAL_REFRESH_MS;
+}
+
+function setAutorefreshMs(ms) {
+  localStorage.setItem(AUTOREFRESH_STORAGE_KEY, String(ms));
+}
+
 function initStatusFilterButtons() {
   document.querySelectorAll('.status-filter-btn').forEach(btn => {
     const status = btn.getAttribute('data-status');
