@@ -564,7 +564,7 @@ function startOpenRunRefresh() {
   clearOpenRunRefresh();
   openRunRefreshInterval = setInterval(() => {
     void refreshOpenRunPanel();
-  }, GLOBAL_REFRESH_MS);
+  }, getAutorefreshMs());
 }
 
 async function fetchJSON(url) {
@@ -1730,7 +1730,7 @@ if (refreshIntervalSelect) {
   refreshIntervalSelect.value = hasMatchingOption ? selectedValue : String(GLOBAL_REFRESH_MS);
 }
 
-document.getElementById('refresh-note').textContent = `Auto-refresh: ${Math.floor(GLOBAL_REFRESH_MS / 1000)}s`;
+document.getElementById('refresh-note').textContent = `Auto-refresh: ${Math.floor(getAutorefreshMs() / 1000)}s`;
 loadWorkflows();
 loadProjects().then(() => {
   if (!currentWf) document.getElementById('board').innerHTML = '<div class="empty" style="margin:auto">Select a workflow</div>';
@@ -1742,12 +1742,12 @@ setInterval(() => {
       if (!currentWf) document.getElementById('board').innerHTML = '<div class="empty" style="margin:auto">Select a workflow</div>';
     });
   }
-}, GLOBAL_REFRESH_MS);
+}, getAutorefreshMs());
 
 setInterval(() => {
   const el = document.getElementById('next-refresh');
   if (!el) return;
-  const remaining = Math.floor(GLOBAL_REFRESH_MS / 1000) - Math.floor((Date.now() - lastRefreshTime) / 1000);
+  const remaining = Math.floor(getAutorefreshMs() / 1000) - Math.floor((Date.now() - lastRefreshTime) / 1000);
   if (remaining <= 0) {
     el.textContent = 'Refreshing...';
   } else {
@@ -1851,7 +1851,7 @@ async function loadMedicData() {
 }
 
 loadMedicStatus();
-setInterval(loadMedicStatus, 30000);
+setInterval(loadMedicStatus, getAutorefreshMs());
 
 // ── Theme toggle ──────────────────────────────────────────────────
 (function initTheme() {
