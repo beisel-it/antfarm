@@ -489,6 +489,8 @@ let workflows = [];
 let currentWf = null;
 let openRunId = null;
 let openRunRefreshInterval = null;
+let mainRefreshInterval = null;
+let medicRefreshInterval = null;
 let backlogEntries = [];
 let editingBacklogId = null;
 let projects = [];
@@ -523,6 +525,7 @@ function getAutorefreshMs() {
     if (stored !== null) {
       const value = Number(stored);
       if (!isNaN(value)) {
+        if (value === 0) return 0;
         return Math.max(AUTOREFRESH_MIN_MS, value);
       }
     }
@@ -532,6 +535,66 @@ function getAutorefreshMs() {
 
 function setAutorefreshMs(ms) {
   localStorage.setItem(AUTOREFRESH_STORAGE_KEY, String(ms));
+}
+
+function updateRefreshNote(ms) {
+  const note = document.getElementById('refresh-note');
+  if (!note) return;
+  if (ms === 0) {
+    note.textContent = 'Auto-refresh: off';
+    return;
+  }
+  note.textContent = `Auto-refresh: ${Math.floor(ms / 1000)}s`;
+}
+
+function restartMainRefreshInterval(ms) {
+  if (mainRefreshInterval) {
+    clearInterval(mainRefreshInterval);
+    mainRefreshInterval = null;
+  }
+
+  if (ms === 0) return;
+
+  mainRefreshInterval = setInterval(() => {
+    if (currentWf) loadRuns();
+    else {
+      Promise.all([loadBacklog(), loadProjects()]).then(() => {
+        if (!currentWf) document.getElementById('board').innerHTML = '<div class="empty" style="margin:auto">Select a workflow</div>';
+      });
+    }
+  }, ms);
+}
+
+function restartMedicRefreshInterval(ms) {
+  if (medicRefreshInterval) {
+    clearInterval(medicRefreshInterval);
+    medicRefreshInterval = null;
+  }
+
+  if (ms === 0) return;
+  medicRefreshInterval = setInterval(loadMedicStatus, ms);
+}
+
+function applyAutorefreshSetting(ms) {
+  restartMainRefreshInterval(ms);
+  restartMedicRefreshInterval(ms);
+
+  if (ms === 0) {
+    stopOpenRunRefresh();
+    const next = document.getElementById('next-refresh');
+    if (next) next.textContent = '—';
+    updateRefreshNote(0);
+    lastRefreshTime = Date.now();
+    return;
+  }
+
+  if (openRunId) {
+    stopOpenRunRefresh();
+    startOpenRunRefresh();
+  }
+
+  updateRefreshNote(ms);
+  lastRefreshTime = Date.now();
 }
 
 function initStatusFilterButtons() {
@@ -552,16 +615,20 @@ function initStatusFilterButtons() {
   });
 }
 
-function clearOpenRunRefresh() {
+function stopOpenRunRefresh() {
   if (openRunRefreshInterval) {
     clearInterval(openRunRefreshInterval);
     openRunRefreshInterval = null;
   }
 }
 
+function clearOpenRunRefresh() {
+  stopOpenRunRefresh();
+}
+
 function startOpenRunRefresh() {
   if (!openRunId) return;
-  clearOpenRunRefresh();
+  stopOpenRunRefresh();
   openRunRefreshInterval = setInterval(() => {
     void refreshOpenRunPanel();
   }, getAutorefreshMs());
@@ -1727,26 +1794,30 @@ if (refreshIntervalSelect) {
   const autorefreshMs = getAutorefreshMs();
   const selectedValue = String(autorefreshMs);
   const hasMatchingOption = !!refreshIntervalSelect.querySelector(`option[value="${selectedValue}"]`);
-  refreshIntervalSelect.value = hasMatchingOption ? selectedValue : String(GLOBAL_REFRESH_MS);
+  const initialValue = hasMatchingOption ? selectedValue : String(GLOBAL_REFRESH_MS);
+  refreshIntervalSelect.value = initialValue;
+
+  refreshIntervalSelect.addEventListener('change', e => {
+    const ms = Number(e.target.value);
+    setAutorefreshMs(ms);
+    applyAutorefreshSetting(ms);
+  });
 }
 
-document.getElementById('refresh-note').textContent = `Auto-refresh: ${Math.floor(getAutorefreshMs() / 1000)}s`;
 loadWorkflows();
 loadProjects().then(() => {
   if (!currentWf) document.getElementById('board').innerHTML = '<div class="empty" style="margin:auto">Select a workflow</div>';
 });
-setInterval(() => {
-  if (currentWf) loadRuns();
-  else {
-    Promise.all([loadBacklog(), loadProjects()]).then(() => {
-      if (!currentWf) document.getElementById('board').innerHTML = '<div class="empty" style="margin:auto">Select a workflow</div>';
-    });
-  }
-}, getAutorefreshMs());
+applyAutorefreshSetting(getAutorefreshMs());
 
 setInterval(() => {
   const el = document.getElementById('next-refresh');
   if (!el) return;
+  const autorefreshMs = getAutorefreshMs();
+  if (autorefreshMs === 0) {
+    el.textContent = '—';
+    return;
+  }
   const remaining = Math.floor(getAutorefreshMs() / 1000) - Math.floor((Date.now() - lastRefreshTime) / 1000);
   if (remaining <= 0) {
     el.textContent = 'Refreshing...';
@@ -1851,7 +1922,6 @@ async function loadMedicData() {
 }
 
 loadMedicStatus();
-setInterval(loadMedicStatus, getAutorefreshMs());
 
 // ── Theme toggle ──────────────────────────────────────────────────
 (function initTheme() {

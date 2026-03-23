@@ -68,8 +68,12 @@ describe("US-003: Refresh interval dropdown in footer", () => {
   it("initializes selected value from getAutorefreshMs() with fallback to 30000", () => {
     assert.ok(html.includes("const autorefreshMs = getAutorefreshMs();"), "Should read stored autorefresh value via getAutorefreshMs()");
     assert.ok(
-      html.includes("refreshIntervalSelect.value = hasMatchingOption ? selectedValue : String(GLOBAL_REFRESH_MS);"),
-      "Should set select value to matching option or fallback to GLOBAL_REFRESH_MS (30000)"
+      html.includes("const initialValue = hasMatchingOption ? selectedValue : String(GLOBAL_REFRESH_MS);"),
+      "Should compute initial select value from matching option or fallback to GLOBAL_REFRESH_MS (30000)"
+    );
+    assert.ok(
+      html.includes("refreshIntervalSelect.value = initialValue;"),
+      "Should set select value to the computed initial value"
     );
   });
 

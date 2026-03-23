@@ -9,8 +9,11 @@ const htmlPath = path.join(__dirname, '../src/server/index.html');
 const html = fs.readFileSync(htmlPath, 'utf8');
 
 describe('US-002: Replace dashboard refresh intervals with getAutorefreshMs()', () => {
-  it('main board refresh setInterval uses getAutorefreshMs()', () => {
-    assert.match(html, /setInterval\(\(\) => \{[\s\S]*if \(currentWf\) loadRuns\(\);[\s\S]*\}, getAutorefreshMs\(\)\);/);
+  it('main board refresh is restarted via applyAutorefreshSetting()', () => {
+    assert.ok(html.includes('function restartMainRefreshInterval(ms) {'));
+    assert.ok(html.includes('mainRefreshInterval = setInterval(() => {'));
+    assert.ok(html.includes('function applyAutorefreshSetting(ms) {'));
+    assert.ok(html.includes('restartMainRefreshInterval(ms);'));
   });
 
   it('openRunRefreshInterval inside startOpenRunRefresh uses getAutorefreshMs()', () => {
@@ -21,26 +24,25 @@ describe('US-002: Replace dashboard refresh intervals with getAutorefreshMs()', 
     assert.ok(body.includes('}, getAutorefreshMs());'), 'open run setInterval should use getAutorefreshMs()');
   });
 
-  it('medic setInterval uses getAutorefreshMs() and not 30000', () => {
-    assert.ok(html.includes('setInterval(loadMedicStatus, getAutorefreshMs());'));
-    assert.ok(!html.includes('setInterval(loadMedicStatus, 30000);'));
+  it('medic refresh is restarted via applyAutorefreshSetting()', () => {
+    assert.ok(html.includes('function restartMedicRefreshInterval(ms) {'));
+    assert.ok(html.includes('medicRefreshInterval = setInterval(loadMedicStatus, ms);'));
+    assert.ok(html.includes('restartMedicRefreshInterval(ms);'));
   });
 
-  it('next-refresh countdown computes total seconds from getAutorefreshMs()', () => {
+  it('countdown computes total seconds from getAutorefreshMs()', () => {
     assert.ok(
       html.includes('const remaining = Math.floor(getAutorefreshMs() / 1000) - Math.floor((Date.now() - lastRefreshTime) / 1000);'),
       'countdown should use getAutorefreshMs() as total seconds source'
     );
   });
 
-  it('refresh-note label uses getAutorefreshMs()', () => {
-    assert.ok(
-      html.includes("document.getElementById('refresh-note').textContent = `Auto-refresh: ${Math.floor(getAutorefreshMs() / 1000)}s`;")
-    );
+  it('refresh-note label is updated via updateRefreshNote()', () => {
+    assert.ok(html.includes('function updateRefreshNote(ms) {'));
+    assert.ok(html.includes("note.textContent = `Auto-refresh: ${Math.floor(ms / 1000)}s`"));
   });
 
-  it('no setInterval call uses GLOBAL_REFRESH_MS or hardcoded 30000', () => {
-    assert.ok(!html.includes('}, GLOBAL_REFRESH_MS);'));
+  it('no active setInterval call uses hardcoded 30000', () => {
     assert.ok(!html.includes(', 30000);'));
   });
 });

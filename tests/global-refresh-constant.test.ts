@@ -18,14 +18,22 @@ describe("US-002: configurable autorefresh interval wiring", () => {
     );
   });
 
-  it("board refresh setInterval uses getAutorefreshMs()", () => {
+  it("main board refresh interval is configurable via restartMainRefreshInterval(ms)", () => {
     assert.ok(
-      html.includes("}, getAutorefreshMs());"),
-      "Expected board refresh setInterval to use getAutorefreshMs()"
+      html.includes("function restartMainRefreshInterval(ms) {"),
+      "Expected restartMainRefreshInterval(ms) helper"
     );
     assert.ok(
-      !html.includes("}, GLOBAL_REFRESH_MS);"),
-      "Board refresh setInterval should no longer use GLOBAL_REFRESH_MS"
+      html.includes("mainRefreshInterval = setInterval(() => {"),
+      "Expected board polling setInterval assigned to mainRefreshInterval"
+    );
+    assert.ok(
+      html.includes("}, ms);") || html.includes("}, ms);"),
+      "Expected main setInterval to use the passed ms value"
+    );
+    assert.ok(
+      html.includes("applyAutorefreshSetting(getAutorefreshMs());"),
+      "Expected page load to apply stored refresh setting"
     );
   });
 
@@ -36,10 +44,18 @@ describe("US-002: configurable autorefresh interval wiring", () => {
     );
   });
 
-  it("refresh-note text is set dynamically using getAutorefreshMs()", () => {
+  it("refresh-note text is updated dynamically via updateRefreshNote(ms)", () => {
     assert.ok(
-      html.includes("`Auto-refresh: ${Math.floor(getAutorefreshMs() / 1000)}s`"),
-      "Expected refresh-note text to be set via template literal using getAutorefreshMs()"
+      html.includes("function updateRefreshNote(ms) {"),
+      "Expected updateRefreshNote(ms) helper"
+    );
+    assert.ok(
+      html.includes("note.textContent = `Auto-refresh: ${Math.floor(ms / 1000)}s`;"),
+      "Expected non-off refresh-note text to be computed from ms"
+    );
+    assert.ok(
+      html.includes("note.textContent = 'Auto-refresh: off';"),
+      "Expected off state refresh-note text"
     );
   });
 
@@ -73,11 +89,9 @@ describe("US-002: configurable autorefresh interval wiring in dist build", () =>
     );
   });
 
-  it("dist: board setInterval uses getAutorefreshMs()", () => {
-    assert.ok(
-      distHtml.includes("}, getAutorefreshMs());"),
-      "Expected getAutorefreshMs() in board setInterval in dist"
-    );
+  it("dist: main refresh helper and apply call exist", () => {
+    assert.ok(distHtml.includes("function restartMainRefreshInterval(ms) {"));
+    assert.ok(distHtml.includes("applyAutorefreshSetting(getAutorefreshMs());"));
   });
 
   it("dist: countdown formula uses getAutorefreshMs()", () => {

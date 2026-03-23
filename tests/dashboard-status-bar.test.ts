@@ -427,10 +427,10 @@ describe("US-005: Countdown timer to next auto-refresh", () => {
   });
 
   it("countdown interval computes remaining using lastRefreshTime", () => {
-    // Find the 1000ms setInterval and check it contains the countdown logic
-    const intervalIdx = html.indexOf("'next-refresh'");
-    assert.ok(intervalIdx !== -1, "Expected 'next-refresh' in setInterval");
-    const intervalSection = html.slice(intervalIdx, intervalIdx + 300);
+    // Find the countdown setInterval and check it contains the countdown logic
+    const intervalIdx = html.indexOf("setInterval(() => {\n  const el = document.getElementById('next-refresh');");
+    assert.ok(intervalIdx !== -1, "Expected countdown setInterval for #next-refresh");
+    const intervalSection = html.slice(intervalIdx, intervalIdx + 700);
     assert.ok(
       intervalSection.includes("lastRefreshTime"),
       "Expected lastRefreshTime in countdown setInterval"
@@ -438,8 +438,8 @@ describe("US-005: Countdown timer to next auto-refresh", () => {
   });
 
   it("countdown shows 'Refreshing...' when remaining <= 0", () => {
-    const intervalIdx = html.indexOf("'next-refresh'");
-    const intervalSection = html.slice(intervalIdx, intervalIdx + 300);
+    const intervalIdx = html.indexOf("setInterval(() => {\n  const el = document.getElementById('next-refresh');");
+    const intervalSection = html.slice(intervalIdx, intervalIdx + 700);
     assert.ok(
       intervalSection.includes("Refreshing..."),
       "Expected 'Refreshing...' text in countdown setInterval"

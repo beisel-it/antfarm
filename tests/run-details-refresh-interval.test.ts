@@ -16,10 +16,18 @@ test('startOpenRunRefresh uses getAutorefreshMs() for setInterval', () => {
   assert.ok(!snippet.includes('30000'), 'startOpenRunRefresh setInterval must not use hardcoded 30000');
 });
 
-test('medic status polling interval uses getAutorefreshMs() and not hardcoded 30000', () => {
+test('medic status polling interval is restarted from applyAutorefreshSetting()', () => {
   assert.ok(
-    html.includes('setInterval(loadMedicStatus, getAutorefreshMs());'),
-    'Medic polling interval must use getAutorefreshMs()'
+    html.includes('function restartMedicRefreshInterval(ms) {'),
+    'restartMedicRefreshInterval function must exist'
+  );
+  assert.ok(
+    html.includes('medicRefreshInterval = setInterval(loadMedicStatus, ms);'),
+    'Medic polling interval must use configured ms value'
+  );
+  assert.ok(
+    html.includes('restartMedicRefreshInterval(ms);'),
+    'applyAutorefreshSetting must restart medic polling'
   );
   assert.ok(
     !html.includes('setInterval(loadMedicStatus, 30000);'),

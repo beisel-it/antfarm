@@ -107,6 +107,7 @@ describe("US-001: autorefresh helpers logic simulation", () => {
       if (storedValue !== null) {
         const value = Number(storedValue);
         if (!isNaN(value)) {
+          if (value === 0) return 0;
           return Math.max(AUTOREFRESH_MIN_MS, value);
         }
       }
@@ -123,9 +124,9 @@ describe("US-001: autorefresh helpers logic simulation", () => {
     assert.equal(simulateGetAutorefreshMs("60000"), 60000);
   });
 
-  it("returns 5000 for stored values below 5000 (clamping)", () => {
+  it("returns 5000 for stored values below 5000 (clamping), except Off=0", () => {
     assert.equal(simulateGetAutorefreshMs("1000"), 5000);
-    assert.equal(simulateGetAutorefreshMs("0"), 5000);
+    assert.equal(simulateGetAutorefreshMs("0"), 0);
     assert.equal(simulateGetAutorefreshMs("4999"), 5000);
   });
 
@@ -137,10 +138,8 @@ describe("US-001: autorefresh helpers logic simulation", () => {
     assert.equal(simulateGetAutorefreshMs("not-a-number"), 30000);
   });
 
-  it("returns GLOBAL_REFRESH_MS for empty string stored value", () => {
-    // Number("") is 0, which is a valid number — clamp to 5000
-    // Actually Number("") === 0, so it returns 5000, not 30000
-    // Let's verify the correct behavior
-    assert.equal(simulateGetAutorefreshMs(""), 5000);
+  it("returns 0 (Off) for empty string stored value", () => {
+    // Number("") === 0, and 0 is treated as explicit Off.
+    assert.equal(simulateGetAutorefreshMs(""), 0);
   });
 });
