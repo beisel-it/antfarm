@@ -387,5 +387,3 @@ steps:
       max_retries: 3
       on_exhausted:
         escalate_to: human
-   on_exhausted:
-        escalate_to: human
