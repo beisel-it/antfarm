@@ -61,4 +61,9 @@ describe("buildPollingPrompt", () => {
     const prompt = buildPollingPrompt("feature-dev", "developer");
     assert.ok(prompt.includes("CLAIMED STEP JSON"), "should instruct to append claimed JSON");
   });
+
+  it("includes explicit runTimeoutSeconds for spawned worker sessions", () => {
+    const prompt = buildPollingPrompt("feature-dev", "developer");
+    assert.ok(prompt.includes("runTimeoutSeconds: 1800"), "should instruct explicit worker runtime timeout");
+  });
 });

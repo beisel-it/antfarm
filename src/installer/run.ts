@@ -124,6 +124,13 @@ export async function dryRunWorkflow(params: {
   };
 }
 
+export function resolveInitialRepoPath(taskTitle: string, projectRepoPath?: string | null): string | undefined {
+  if (projectRepoPath) return projectRepoPath;
+  const inferredRepo = extractRepoPath(taskTitle);
+  if (inferredRepo && isGitRepo(inferredRepo)) return inferredRepo;
+  return undefined;
+}
+
 export async function runWorkflow(params: {
   workflowId: string;
   taskTitle: string;
@@ -150,10 +157,13 @@ export async function runWorkflow(params: {
     task: params.taskTitle,
     ...workflow.context,
   };
-  if (project?.git_repo_path) {
-    initialContext["repo"] = project.git_repo_path;
+
+  const inferredRepo = extractRepoPath(params.taskTitle);
+  const repoPath = project?.git_repo_path ?? (inferredRepo && isGitRepo(inferredRepo) ? inferredRepo : undefined);
+  if (repoPath) {
+    initialContext["repo"] = repoPath;
   }
-  if (!initialContext["branch"] && project?.git_repo_path) {
+  if (!initialContext["branch"] && repoPath) {
     initialContext["branch"] = deriveBranchName(workflow.id, params.taskTitle);
   }
 

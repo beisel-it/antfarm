@@ -12,7 +12,7 @@ description: |
 polling:
   model: openai-codex/gpt-5.3-codex
   thinking: high
-  timeoutSeconds: 120
+  timeoutSeconds: 7200
 
 agents:
   - id: preflight

@@ -128,6 +128,8 @@ steps:
 
 Full guide: [docs/creating-workflows.md](docs/creating-workflows.md)
 
+Contract helper CLIs (structured commit + criterion verifier): [docs/contract-helpers.md](docs/contract-helpers.md)
+
 ---
 
 ## Security

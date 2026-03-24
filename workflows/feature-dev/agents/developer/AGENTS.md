@@ -46,6 +46,7 @@ Before EVERY commit, verify:
 
 ## Commits
 
+- Use `antfarm contract commit --message "<msg>"` to create commits so the workflow captures structured status. Do **not** run `git commit` directly.
 - One logical change per commit when possible
 - Clear commit message explaining what and why
 - Include all relevant files (except those excluded by .gitignore)
@@ -78,7 +79,7 @@ You work on **ONE user story per session**. A fresh session is started for each 
 2. Check the branch, pull latest
 3. Implement the story described in your task input
 4. Run quality checks (`npm run build`, typecheck, etc.)
-5. Commit: `feat: <story-id> - <story-title>`
+5. Commit using the contract wrapper: `antfarm contract commit --message "feat: <story-id> - <story-title>"`
 6. Update `progress-{{run_id}}.txt` by rewriting the entire file (do not use `edit`)
 7. Update **Codebase Patterns** in `progress-{{run_id}}.txt` if you found reusable patterns
 8. Update `AGENTS.md` if you learned something structural about the codebase

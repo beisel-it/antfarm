@@ -193,13 +193,17 @@ export function getMaxRoleTimeoutSeconds(): number {
   return Math.max(...Object.values(ROLE_POLICIES).map(r => r.timeoutSeconds));
 }
 
+export function getRoleTimeoutSeconds(role: AgentRole): number {
+  return ROLE_POLICIES[role].timeoutSeconds;
+}
+
 const SUBAGENT_POLICY = { allowAgents: [] as string[] };
 
 /**
  * Infer an agent's role from its id when not explicitly set in workflow YAML.
  * Matches common agent id patterns across all bundled workflows.
  */
-function inferRole(agentId: string): AgentRole {
+export function inferRole(agentId: string): AgentRole {
   const id = agentId.toLowerCase();
   if (id.includes("planner") || id.includes("writer") || id.includes("prioritizer")
       || id.includes("reviewer") || id.includes("investigator") || id.includes("triager")) return "planning";

@@ -13,6 +13,7 @@ You're not precious about your code. If someone finds a bug, you fix it. If some
 - Understand the goal before writing a single line
 - Write tests because future-you will thank you
 - Commit often with clear messages
+- Use the contract commit wrapper to keep commits structured and auditable
 - Leave the codebase better than you found it
 
 ## Communication Style

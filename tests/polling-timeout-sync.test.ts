@@ -2,7 +2,7 @@
  * Regression test: polling timeout values stay in sync
  *
  * This test was added after a bug where test assertions expected
- * timeoutSeconds=30 but the workflow.yml files had been updated to 120.
+ * timeoutSeconds=30 but the workflow.yml files had been updated to 7200.
  * It reads the actual workflow.yml values and asserts they match expectations,
  * ensuring tests and config never drift apart again.
  *
@@ -34,20 +34,20 @@ describe("polling timeout sync across all workflows", () => {
       // If this fails, it means the spec loader or the YAML is misconfigured
       assert.equal(
         spec.polling.timeoutSeconds,
-        120,
-        `${name} polling timeout should be 120s (was changed from 30s — see issue #121)`
+        7200,
+        `${name} polling timeout should be 7200s (was changed from 30s — see issue #121)`
       );
     });
 
-    it(`${name} workflow polling.model is set to 'default' (OpenClaw resolves model)`, async () => {
+    it(`${name} workflow polling.model is pinned to the configured cron model`, async () => {
       const dir = path.join(WORKFLOWS_DIR, name);
       const spec = await loadWorkflowSpec(dir);
 
       assert.ok(spec.polling, `${name} should have a polling config`);
       assert.equal(
         spec.polling.model,
-        "default",
-        `${name} polling model should be "default" to let OpenClaw resolve the model, got: ${spec.polling.model}`
+        "openai-codex/gpt-5.1-codex-max",
+        `${name} polling model should be openai-codex/gpt-5.1-codex-max, got: ${spec.polling.model}`
       );
     });
   }

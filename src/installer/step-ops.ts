@@ -56,6 +56,22 @@ export function parseOutputKeyValues(output: string): Record<string, string> {
   return result;
 }
 
+function extractSpecialKeyBlock(output: string, key: string): string | null {
+  const lines = output.split("\n");
+  const prefix = `${key}:`;
+  const startIdx = lines.findIndex(line => line.startsWith(prefix));
+  if (startIdx === -1) return null;
+
+  const firstLine = lines[startIdx].slice(prefix.length).trim();
+  const valueLines = [firstLine];
+  for (let i = startIdx + 1; i < lines.length; i++) {
+    if (/^[A-Z_]+:\s/.test(lines[i])) break;
+    valueLines.push(lines[i]);
+  }
+
+  return valueLines.join("\n").trim();
+}
+
 /**
  * Validate that step output contains all required keys specified in expects.
  * Throws an error if any required keys are missing.
@@ -69,15 +85,44 @@ function validateStepOutput(expects: string, output: string): void {
 
   // Parse actual output keys
   const actualKeys = parseOutputKeyValues(output);
+  const missingKeys: string[] = [];
+  const parseErrors: string[] = [];
 
-  // Check each expected key is present
-  const missingKeys = expectedKeys.filter(key => !actualKeys.hasOwnProperty(key));
+  for (const key of expectedKeys) {
+    if (key === "stories_json") {
+      const rawStories = extractSpecialKeyBlock(output, "STORIES_JSON");
+      if (!rawStories) {
+        missingKeys.push(key);
+        continue;
+      }
+      try {
+        const parsedStories = JSON.parse(rawStories);
+        if (!Array.isArray(parsedStories)) {
+          parseErrors.push("stories_json must be a valid JSON array");
+        }
+      } catch (err) {
+        parseErrors.push(`stories_json is not parseable JSON: ${(err as Error).message}`);
+      }
+      continue;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(actualKeys, key)) {
+      missingKeys.push(key);
+    }
+  }
 
   if (missingKeys.length > 0) {
     throw new Error(
       `Step output missing required keys: ${missingKeys.join(", ")}. ` +
       `Expected keys from 'expects': ${expects}. ` +
       `Add these keys to your output before completing the step.`
+    );
+  }
+
+  if (parseErrors.length > 0) {
+    throw new Error(
+      `Step output has malformed required keys: ${parseErrors.join("; ")}. ` +
+      `Expected keys from 'expects': ${expects}.`
     );
   }
 }
@@ -137,6 +182,144 @@ function findMissingTemplateKeys(template: string, context: Record<string, strin
     return "";
   });
   return missing;
+}
+
+function buildStepContext(runId: string): Record<string, string> {
+  const db = getDb();
+  const run = db.prepare("SELECT context FROM runs WHERE id = ?").get(runId) as { context: string } | undefined;
+  const context: Record<string, string> = run ? JSON.parse(run.context) : {};
+
+  context["run_id"] = runId;
+
+  if (context["repo"] && context["branch"]) {
+    context["has_frontend_changes"] = computeHasFrontendChanges(context["repo"], context["branch"]);
+  } else {
+    context["has_frontend_changes"] = "false";
+  }
+
+  const hasStories = db.prepare(
+    "SELECT COUNT(*) as cnt FROM stories WHERE run_id = ?"
+  ).get(runId) as { cnt: number };
+  if (hasStories.cnt > 0) {
+    context["progress"] = readProgressFile(runId);
+  }
+
+  return context;
+}
+
+function isStepInputReady(inputTemplate: string, context: Record<string, string>): boolean {
+  return findMissingTemplateKeys(inputTemplate, context).length === 0;
+}
+
+function promoteStepToPendingIfReady(stepId: string): boolean {
+  const db = getDb();
+  const step = db.prepare(
+    "SELECT id, run_id, input_template, type, loop_config FROM steps WHERE id = ?"
+  ).get(stepId) as { id: string; run_id: string; input_template: string; type: string; loop_config: string | null } | undefined;
+
+  if (!step) return false;
+
+  // Loop steps (for example implement over stories) receive story-specific vars such as
+  // current_story / completed_stories / progress only at claim time after a concrete story
+  // has been selected. They must not be blocked at promotion time on those placeholders.
+  if (step.type === "loop") {
+    const loopConfig: LoopConfig | null = step.loop_config ? JSON.parse(step.loop_config) : null;
+    if (loopConfig?.over === "stories" && runHasStories(step.run_id)) {
+      db.prepare(
+        "UPDATE steps SET status = 'pending', updated_at = datetime('now') WHERE id = ?"
+      ).run(step.id);
+      return true;
+    }
+    return false;
+  }
+
+  const context = buildStepContext(step.run_id);
+  if (!isStepInputReady(step.input_template, context)) {
+    return false;
+  }
+
+  db.prepare(
+    "UPDATE steps SET status = 'pending', updated_at = datetime('now') WHERE id = ?"
+  ).run(step.id);
+  return true;
+}
+
+function reconcileCompletedVerifyEachLoops(runId: string): boolean {
+  const db = getDb();
+  const loopSteps = db.prepare(
+    "SELECT id, step_id, step_index, status, current_story_id, loop_config FROM steps WHERE run_id = ? AND type = 'loop' AND loop_config IS NOT NULL ORDER BY step_index ASC"
+  ).all(runId) as {
+    id: string;
+    step_id: string;
+    step_index: number;
+    status: string;
+    current_story_id: string | null;
+    loop_config: string | null;
+  }[];
+
+  let changed = false;
+
+  for (const loopStep of loopSteps) {
+    const loopConfig: LoopConfig | null = loopStep.loop_config ? JSON.parse(loopStep.loop_config) : null;
+    if (!loopConfig?.verifyEach || !loopConfig.verifyStep || loopConfig.over !== "stories") continue;
+
+    const storyCounts = db.prepare(
+      `SELECT
+         SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending_count,
+         SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END) AS running_count,
+         SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed_count,
+         SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) AS done_count,
+         COUNT(*) AS total_count
+       FROM stories
+       WHERE run_id = ?`
+    ).get(runId) as {
+      pending_count: number | null;
+      running_count: number | null;
+      failed_count: number | null;
+      done_count: number | null;
+      total_count: number;
+    };
+
+    const totalStories = storyCounts.total_count ?? 0;
+    const pendingStories = storyCounts.pending_count ?? 0;
+    const runningStories = storyCounts.running_count ?? 0;
+    const failedStories = storyCounts.failed_count ?? 0;
+    const doneStories = storyCounts.done_count ?? 0;
+
+    if (totalStories === 0 || failedStories > 0 || pendingStories > 0 || runningStories > 0) continue;
+    if (doneStories !== totalStories) continue;
+    if (loopStep.current_story_id) continue;
+
+    const verifyStep = db.prepare(
+      "SELECT id, step_id, step_index, status FROM steps WHERE run_id = ? AND step_id = ? LIMIT 1"
+    ).get(runId, loopConfig.verifyStep) as { id: string; step_id: string; step_index: number; status: string } | undefined;
+
+    if (!verifyStep) continue;
+    if (verifyStep.status === "failed") continue;
+
+    const downstreamAlreadyActive = db.prepare(
+      "SELECT id FROM steps WHERE run_id = ? AND step_index > ? AND status IN ('pending', 'running', 'done', 'skipped') LIMIT 1"
+    ).get(runId, verifyStep.step_index) as { id: string } | undefined;
+
+    const verifyCanBeSealed = verifyStep.status === "done" || verifyStep.status === "waiting" || !!downstreamAlreadyActive;
+    if (!verifyCanBeSealed) continue;
+
+    if (loopStep.status !== "done") {
+      db.prepare(
+        "UPDATE steps SET status = 'done', current_story_id = NULL, finished_at = COALESCE(finished_at, datetime('now')), updated_at = datetime('now') WHERE id = ?"
+      ).run(loopStep.id);
+      changed = true;
+    }
+
+    if (verifyStep.status !== "done") {
+      db.prepare(
+        "UPDATE steps SET status = 'done', finished_at = COALESCE(finished_at, datetime('now')), updated_at = datetime('now') WHERE id = ?"
+      ).run(verifyStep.id);
+      changed = true;
+    }
+  }
+
+  return changed;
 }
 
 /**
@@ -245,19 +428,8 @@ function formatCompletedStories(stories: Story[]): string {
  * Parse STORIES_JSON from step output and insert stories into the DB.
  */
 function parseAndInsertStories(output: string, runId: string): void {
-  const lines = output.split("\n");
-  const startIdx = lines.findIndex(l => l.startsWith("STORIES_JSON:"));
-  if (startIdx === -1) return;
-
-  // Collect JSON text: first line after prefix, then subsequent lines until next KEY: or end
-  const firstLine = lines[startIdx].slice("STORIES_JSON:".length).trim();
-  const jsonLines = [firstLine];
-  for (let i = startIdx + 1; i < lines.length; i++) {
-    if (/^[A-Z_]+:\s/.test(lines[i])) break;
-    jsonLines.push(lines[i]);
-  }
-
-  const jsonText = jsonLines.join("\n").trim();
+  const jsonText = extractSpecialKeyBlock(output, "STORIES_JSON");
+  if (!jsonText) return;
   let stories: any[];
   try {
     stories = JSON.parse(jsonText);
@@ -275,7 +447,7 @@ function parseAndInsertStories(output: string, runId: string): void {
   const db = getDb();
   const now = new Date().toISOString();
   const insert = db.prepare(
-    "INSERT INTO stories (id, run_id, story_index, story_id, title, description, acceptance_criteria, status, retry_count, max_retries, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 0, 2, ?, ?)"
+    "INSERT OR IGNORE INTO stories (id, run_id, story_index, story_id, title, description, acceptance_criteria, status, retry_count, max_retries, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 0, 2, ?, ?)"
   );
 
   const seenIds = new Set<string>();
@@ -436,6 +608,17 @@ export function cleanupAbandonedSteps(): void {
     logger.info(`Recovering stuck pipeline after loop completion`, { runId: stuck.run_id, stepId: stuck.id });
     advancePipeline(stuck.run_id);
   }
+
+  const verifyEachRuns = db.prepare(
+    "SELECT DISTINCT run_id FROM steps WHERE type = 'loop' AND loop_config IS NOT NULL AND JSON_EXTRACT(loop_config, '$.verifyEach') = 1"
+  ).all() as { run_id: string }[];
+
+  for (const candidate of verifyEachRuns) {
+    if (reconcileCompletedVerifyEachLoops(candidate.run_id)) {
+      logger.info(`Recovered verify_each terminal state drift`, { runId: candidate.run_id });
+      advancePipeline(candidate.run_id);
+    }
+  }
 }
 
 // ── Frontend change detection ───────────────────────────────────────
@@ -586,18 +769,7 @@ export function claimStep(agentId: string, sessionKey?: string): ClaimResult {
   if (runStatus?.status === "failed") return { found: false };
 
   // Get run context
-  const run = db.prepare("SELECT context FROM runs WHERE id = ?").get(step.run_id) as { context: string } | undefined;
-  const context: Record<string, string> = run ? JSON.parse(run.context) : {};
-
-  // Always inject run_id so templates can use {{run_id}} (e.g. for scoped progress files)
-  context["run_id"] = step.run_id;
-
-  // Compute has_frontend_changes from git diff when repo and branch are available
-  if (context["repo"] && context["branch"]) {
-    context["has_frontend_changes"] = computeHasFrontendChanges(context["repo"], context["branch"]);
-  } else {
-    context["has_frontend_changes"] = "false";
-  }
+  const context = buildStepContext(step.run_id);
 
   // T6: Loop step claim logic
   if (step.type === "loop") {
@@ -760,7 +932,16 @@ export function claimStep(agentId: string, sessionKey?: string): ClaimResult {
 
   const missingKeys = findMissingTemplateKeys(step.input_template, context);
   if (missingKeys.length > 0) {
-    failStepWithMissingInputs(step.id, step.step_id, step.run_id, missingKeys);
+    db.prepare(
+      "UPDATE steps SET status = 'waiting', updated_at = datetime('now') WHERE id = ?"
+    ).run(step.id);
+    logger.warn(
+      `Step ${step.step_id} was pending but input is not ready; returned to waiting (missing: ${missingKeys.join(", ")})`,
+      {
+        runId: step.run_id,
+        stepId: step.step_id,
+      }
+    );
     return { found: false };
   }
 
@@ -783,10 +964,18 @@ export function completeStep(stepId: string, output: string): { advanced: boolea
   const db = getDb();
 
   const step = db.prepare(
-    "SELECT id, run_id, step_id, step_index, type, loop_config, current_story_id, expects, session_key FROM steps WHERE id = ?"
-  ).get(stepId) as { id: string; run_id: string; step_id: string; step_index: number; type: string; loop_config: string | null; current_story_id: string | null; expects: string; session_key: string | null } | undefined;
+    "SELECT id, run_id, step_id, step_index, type, loop_config, current_story_id, expects, session_key, status FROM steps WHERE id = ?"
+  ).get(stepId) as { id: string; run_id: string; step_id: string; step_index: number; type: string; loop_config: string | null; current_story_id: string | null; expects: string; session_key: string | null; status: string } | undefined;
 
   if (!step) throw new Error(`Step not found: ${stepId}`);
+
+  // Only a currently-running step may complete. This makes completion idempotent
+  // for replayed/stale session output and prevents verify_each handoff corruption
+  // where an old implement/verifier session reports back after the step has already
+  // been reset to pending/waiting for the next story transition.
+  if (step.status !== "running") {
+    return { advanced: false, runCompleted: false };
+  }
 
   // Validate expected output keys before processing
   validateStepOutput(step.expects, output);
@@ -845,9 +1034,7 @@ export function completeStep(stepId: string, output: string): { advanced: boolea
       ).get(step.run_id, loopConfig.verifyStep) as { id: string } | undefined;
 
       if (verifyStep) {
-        db.prepare(
-          "UPDATE steps SET status = 'pending', updated_at = datetime('now') WHERE id = ?"
-        ).run(verifyStep.id);
+        promoteStepToPendingIfReady(verifyStep.id);
         // Loop step stays 'running' - preserve existing session_key
         db.prepare(
           "UPDATE steps SET status = 'running', session_key = ?, updated_at = datetime('now') WHERE id = ?"
@@ -1059,6 +1246,8 @@ export function advancePipeline(runId: string): { advanced: boolean; runComplete
     return { advanced: false, runCompleted: false };
   }
 
+  reconcileCompletedVerifyEachLoops(runId);
+
   const runningStep = db.prepare(
     "SELECT id FROM steps WHERE run_id = ? AND status = 'running' LIMIT 1"
   ).get(runId) as { id: string } | undefined;
@@ -1066,9 +1255,21 @@ export function advancePipeline(runId: string): { advanced: boolean; runComplete
     return { advanced: false, runCompleted: false };
   }
 
-  const next = db.prepare(
-    "SELECT id, step_id FROM steps WHERE run_id = ? AND status = 'waiting' ORDER BY step_index ASC LIMIT 1"
-  ).get(runId) as { id: string; step_id: string } | undefined;
+  const waitingSteps = db.prepare(
+    "SELECT id, step_id FROM steps WHERE run_id = ? AND status = 'waiting' ORDER BY step_index ASC"
+  ).all(runId) as { id: string; step_id: string }[];
+
+  let next: { id: string; step_id: string } | undefined;
+  for (const candidate of waitingSteps) {
+    if (promoteStepToPendingIfReady(candidate.id)) {
+      next = candidate;
+      break;
+    }
+  }
+
+  if (!next && waitingSteps.length > 0) {
+    return { advanced: false, runCompleted: false };
+  }
 
   const incomplete = db.prepare(
     "SELECT id FROM steps WHERE run_id = ? AND status IN ('failed', 'pending', 'running') LIMIT 1"
@@ -1080,9 +1281,6 @@ export function advancePipeline(runId: string): { advanced: boolean; runComplete
 
   const wfId = getWorkflowId(runId);
   if (next) {
-    db.prepare(
-      "UPDATE steps SET status = 'pending', updated_at = datetime('now') WHERE id = ?"
-    ).run(next.id);
     emitEvent({ ts: new Date().toISOString(), event: "pipeline.advanced", runId, workflowId: wfId, stepId: next.step_id });
     emitEvent({ ts: new Date().toISOString(), event: "step.pending", runId, workflowId: wfId, stepId: next.step_id });
     return { advanced: true, runCompleted: false };

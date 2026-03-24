@@ -17,8 +17,8 @@ description: |
     /home/user/projects/my-app 2.1.0
 
 polling:
-  model: default
-  timeoutSeconds: 120
+  model: openai-codex/gpt-5.1-codex-max
+  timeoutSeconds: 7200
 
 agents:
   - id: analyst

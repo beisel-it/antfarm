@@ -21,8 +21,8 @@ describe("security-audit workflow polling config", () => {
   it("has a polling section with model and timeoutSeconds", async () => {
     const spec = await loadWorkflowSpec(WORKFLOW_DIR);
     assert.ok(spec.polling, "polling config should exist");
-    assert.equal(spec.polling.model, "default");
-    assert.equal(spec.polling.timeoutSeconds, 120);
+    assert.equal(spec.polling.model, "openai-codex/gpt-5.1-codex-max");
+    assert.equal(spec.polling.timeoutSeconds, 7200);
   });
 
   it("still has all expected agents", async () => {

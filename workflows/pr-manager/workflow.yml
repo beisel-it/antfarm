@@ -10,8 +10,8 @@ description: |
   Once approved and green, Merger squash-merges the PR.
 
 polling:
-  model: default
-  timeoutSeconds: 120
+  model: openai-codex/gpt-5.1-codex-max
+  timeoutSeconds: 7200
 
 agents:
   - id: checker
