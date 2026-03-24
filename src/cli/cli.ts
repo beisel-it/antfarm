@@ -27,7 +27,8 @@ import { claimStep, completeStep, failStep, getStories, peekStep } from "../inst
 import { ensureCliSymlink } from "../installer/symlink.js";
 import { runMedicCheck, getMedicStatus, getRecentMedicChecks } from "../medic/medic.js";
 import { installMedicCron, uninstallMedicCron, isMedicCronInstalled } from "../medic/medic-cron.js";
-import { execSync } from "node:child_process";
+import { writeContractOutput } from "../lib/contract-output.js";
+import { execSync, execFileSync } from "node:child_process";
 import { readFileSync, writeSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -121,6 +122,8 @@ function printUsage() {
       "antfarm step complete <step-id>      Complete step (reads output from stdin)",
       "antfarm step fail <step-id> <error>  Fail step with retry logic",
       "antfarm step stories <run-id>       List stories for a run",
+      "",
+      "antfarm contract commit --message <msg>  Git commit staged changes with structured output",
       "",
       "antfarm backlog list                 List all backlog entries",
       "antfarm backlog add <title> [--description <text>] [--priority <n>] [--project <id>] [--workflow <id>]",
@@ -440,6 +443,81 @@ async function main() {
       return;
     }
     process.stderr.write(`Unknown step action: ${action}\n`);
+    printUsage();
+    process.exit(1);
+  }
+
+  if (group === "contract") {
+    if (action === "commit") {
+      const msgIdx = args.indexOf("--message");
+      const shortMsgIdx = args.indexOf("-m");
+      const message =
+        (msgIdx !== -1 && args[msgIdx + 1])
+          ? args[msgIdx + 1]
+          : (shortMsgIdx !== -1 && args[shortMsgIdx + 1])
+            ? args[shortMsgIdx + 1]
+            : undefined;
+
+      if (!message) {
+        writeContractOutput({
+          status: "error",
+          summary: "Commit message is required",
+          error: "Missing --message <msg>",
+        });
+        return;
+      }
+
+      let stagedFiles: string[] = [];
+      try {
+        const staged = execSync("git diff --cached --name-only", { encoding: "utf-8" });
+        stagedFiles = staged.split("\n").map((s) => s.trim()).filter(Boolean);
+      } catch (err) {
+        writeContractOutput({
+          status: "error",
+          summary: "Failed to inspect staged changes",
+          error: err instanceof Error ? err.message : String(err),
+        });
+        return;
+      }
+
+      if (stagedFiles.length === 0) {
+        writeContractOutput({
+          status: "error",
+          summary: "No staged changes to commit",
+          error: "Stage files before committing",
+        });
+        return;
+      }
+
+      try {
+        execFileSync("git", ["commit", "-m", message], { cwd: process.cwd(), stdio: "ignore" });
+      } catch (err) {
+        writeContractOutput({
+          status: "error",
+          summary: "Git commit failed",
+          error: err instanceof Error ? err.message : String(err),
+        });
+        return;
+      }
+
+      try {
+        const sha = execSync("git rev-parse HEAD", { encoding: "utf-8" }).trim();
+        writeContractOutput({
+          status: "ok",
+          summary: "Commit created",
+          data: { sha, message, stagedFiles: stagedFiles.length },
+        });
+      } catch (err) {
+        writeContractOutput({
+          status: "error",
+          summary: "Commit created but failed to read SHA",
+          error: err instanceof Error ? err.message : String(err),
+          data: { message, stagedFiles: stagedFiles.length },
+        });
+      }
+      return;
+    }
+
     printUsage();
     process.exit(1);
   }
