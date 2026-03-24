@@ -27,9 +27,10 @@ import { claimStep, completeStep, failStep, getStories, peekStep } from "../inst
 import { ensureCliSymlink } from "../installer/symlink.js";
 import { runMedicCheck, getMedicStatus, getRecentMedicChecks } from "../medic/medic.js";
 import { installMedicCron, uninstallMedicCron, isMedicCronInstalled } from "../medic/medic-cron.js";
-import { writeContractOutput } from "../lib/contract-output.js";
+import { writeContractOutput, type ContractStatus } from "../lib/contract-output.js";
+import type { Criterion, CriterionResult } from "../lib/criteria-verifier.js";
 import { execSync, execFileSync } from "node:child_process";
-import { readFileSync, writeSync } from "node:fs";
+import { readFileSync, writeFileSync, writeSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -123,7 +124,8 @@ function printUsage() {
       "antfarm step fail <step-id> <error>  Fail step with retry logic",
       "antfarm step stories <run-id>       List stories for a run",
       "",
-      "antfarm contract commit --message <msg>  Git commit staged changes with structured output",
+      "antfarm contract commit --message <msg>           Git commit staged changes with structured output",
+      "antfarm contract verify-criteria --file <path>    Walk acceptance criteria with explicit per-item decisions",
       "",
       "antfarm backlog list                 List all backlog entries",
       "antfarm backlog add <title> [--description <text>] [--priority <n>] [--project <id>] [--workflow <id>]",
@@ -516,6 +518,90 @@ async function main() {
         });
       }
       return;
+    }
+
+    if (action === "verify-criteria") {
+      const criteriaFileIdx = args.indexOf("--file");
+      const criteriaJsonIdx = args.indexOf("--criteria");
+      const decisionsIdx = args.indexOf("--decisions");
+      const wantsLog = args.includes("--log");
+      const wantsJson = args.includes("--json");
+      const jsonOutIdx = args.indexOf("--json-output");
+
+      const { loadCriteriaFromFile, parseCriteriaJson, parseDecisionsJson, verifyCriteria } = await import("../lib/criteria-verifier.js");
+
+      try {
+        let criteria: Criterion[];
+        if (criteriaFileIdx !== -1 && args[criteriaFileIdx + 1]) {
+          criteria = loadCriteriaFromFile(args[criteriaFileIdx + 1]);
+        } else if (criteriaJsonIdx !== -1 && args[criteriaJsonIdx + 1]) {
+          criteria = parseCriteriaJson(args[criteriaJsonIdx + 1]);
+        } else {
+          writeContractOutput({
+            status: "error",
+            summary: "Criteria input is required",
+            error: "Provide --file <path> or --criteria <json>",
+          });
+          return;
+        }
+
+        let decisions: CriterionResult[] | undefined;
+        if (decisionsIdx !== -1) {
+          const decisionArg = args[decisionsIdx + 1];
+          if (!decisionArg) {
+            writeContractOutput({
+              status: "error",
+              summary: "Missing decisions",
+              error: "Provide --decisions with JSON array of statuses or decision objects",
+            });
+            return;
+          }
+          decisions = parseDecisionsJson(decisionArg, criteria);
+        }
+
+        const logger = wantsLog ? logLine : undefined;
+        const verification = await verifyCriteria({ criteria, decisions, logger });
+
+        const data = {
+          overall: verification.overall,
+          criteria: verification.criteria,
+        };
+
+        if (wantsJson) {
+          logLine(JSON.stringify(data, null, 2));
+        }
+
+        if (jsonOutIdx !== -1) {
+          const outPath = args[jsonOutIdx + 1];
+          if (!outPath) {
+            writeContractOutput({
+              status: "error",
+              summary: "Missing output path",
+              error: "Provide --json-output <path> when using the flag",
+            });
+            return;
+          }
+          writeFileSync(outPath, JSON.stringify(data, null, 2), "utf-8");
+          logLine(`Saved decisions to ${outPath}`);
+        }
+
+        const status: ContractStatus = verification.overall === "pass" ? "ok" : "error";
+        const summary = status === "ok" ? "All criteria passed" : "Criteria need attention";
+
+        writeContractOutput({
+          status,
+          summary,
+          data,
+        });
+        return;
+      } catch (err) {
+        writeContractOutput({
+          status: "error",
+          summary: "Failed to verify criteria",
+          error: err instanceof Error ? err.message : String(err),
+        });
+        return;
+      }
     }
 
     printUsage();
