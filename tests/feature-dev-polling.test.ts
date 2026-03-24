@@ -58,10 +58,10 @@ describe("feature-dev workflow polling config", () => {
     assert.equal(spec.version, 5);
   });
 
-  it("planner step requires STORIES_JSON in expects", async () => {
+  it("planner step requires repo, branch, and STORIES_JSON in expects", async () => {
     const spec = await loadWorkflowSpec(WORKFLOW_DIR);
     const planStep = spec.steps.find((s) => s.id === "plan");
     assert.ok(planStep, "plan step should exist");
-    assert.equal(planStep.expects, "STATUS: done, STORIES_JSON");
+    assert.equal(planStep.expects, "STATUS: done, REPO, BRANCH, STORIES_JSON");
   });
 });
