@@ -880,7 +880,11 @@ export function completeStep(stepId: string, output: string): { advanced: boolea
 
   if (!step) throw new Error(`Step not found: ${stepId}`);
 
-  if (step.status === "done" || step.status === "failed") {
+  // Only a currently-running step may complete. This makes completion idempotent
+  // for replayed/stale session output and prevents verify_each handoff corruption
+  // where an old implement/verifier session reports back after the step has already
+  // been reset to pending/waiting for the next story transition.
+  if (step.status !== "running") {
     return { advanced: false, runCompleted: false };
   }
 
