@@ -244,6 +244,84 @@ function promoteStepToPendingIfReady(stepId: string): boolean {
   return true;
 }
 
+function reconcileCompletedVerifyEachLoops(runId: string): boolean {
+  const db = getDb();
+  const loopSteps = db.prepare(
+    "SELECT id, step_id, step_index, status, current_story_id, loop_config FROM steps WHERE run_id = ? AND type = 'loop' AND loop_config IS NOT NULL ORDER BY step_index ASC"
+  ).all(runId) as {
+    id: string;
+    step_id: string;
+    step_index: number;
+    status: string;
+    current_story_id: string | null;
+    loop_config: string | null;
+  }[];
+
+  let changed = false;
+
+  for (const loopStep of loopSteps) {
+    const loopConfig: LoopConfig | null = loopStep.loop_config ? JSON.parse(loopStep.loop_config) : null;
+    if (!loopConfig?.verifyEach || !loopConfig.verifyStep || loopConfig.over !== "stories") continue;
+
+    const storyCounts = db.prepare(
+      `SELECT
+         SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending_count,
+         SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END) AS running_count,
+         SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed_count,
+         SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) AS done_count,
+         COUNT(*) AS total_count
+       FROM stories
+       WHERE run_id = ?`
+    ).get(runId) as {
+      pending_count: number | null;
+      running_count: number | null;
+      failed_count: number | null;
+      done_count: number | null;
+      total_count: number;
+    };
+
+    const totalStories = storyCounts.total_count ?? 0;
+    const pendingStories = storyCounts.pending_count ?? 0;
+    const runningStories = storyCounts.running_count ?? 0;
+    const failedStories = storyCounts.failed_count ?? 0;
+    const doneStories = storyCounts.done_count ?? 0;
+
+    if (totalStories === 0 || failedStories > 0 || pendingStories > 0 || runningStories > 0) continue;
+    if (doneStories !== totalStories) continue;
+    if (loopStep.current_story_id) continue;
+
+    const verifyStep = db.prepare(
+      "SELECT id, step_id, step_index, status FROM steps WHERE run_id = ? AND step_id = ? LIMIT 1"
+    ).get(runId, loopConfig.verifyStep) as { id: string; step_id: string; step_index: number; status: string } | undefined;
+
+    if (!verifyStep) continue;
+    if (verifyStep.status === "failed") continue;
+
+    const downstreamAlreadyActive = db.prepare(
+      "SELECT id FROM steps WHERE run_id = ? AND step_index > ? AND status IN ('pending', 'running', 'done', 'skipped') LIMIT 1"
+    ).get(runId, verifyStep.step_index) as { id: string } | undefined;
+
+    const verifyCanBeSealed = verifyStep.status === "done" || verifyStep.status === "waiting" || !!downstreamAlreadyActive;
+    if (!verifyCanBeSealed) continue;
+
+    if (loopStep.status !== "done") {
+      db.prepare(
+        "UPDATE steps SET status = 'done', current_story_id = NULL, finished_at = COALESCE(finished_at, datetime('now')), updated_at = datetime('now') WHERE id = ?"
+      ).run(loopStep.id);
+      changed = true;
+    }
+
+    if (verifyStep.status !== "done") {
+      db.prepare(
+        "UPDATE steps SET status = 'done', finished_at = COALESCE(finished_at, datetime('now')), updated_at = datetime('now') WHERE id = ?"
+      ).run(verifyStep.id);
+      changed = true;
+    }
+  }
+
+  return changed;
+}
+
 /**
  * Get the workspace path for an OpenClaw agent by its id.
  */
@@ -529,6 +607,17 @@ export function cleanupAbandonedSteps(): void {
   for (const stuck of stuckLoops) {
     logger.info(`Recovering stuck pipeline after loop completion`, { runId: stuck.run_id, stepId: stuck.id });
     advancePipeline(stuck.run_id);
+  }
+
+  const verifyEachRuns = db.prepare(
+    "SELECT DISTINCT run_id FROM steps WHERE type = 'loop' AND loop_config IS NOT NULL AND JSON_EXTRACT(loop_config, '$.verifyEach') = 1"
+  ).all() as { run_id: string }[];
+
+  for (const candidate of verifyEachRuns) {
+    if (reconcileCompletedVerifyEachLoops(candidate.run_id)) {
+      logger.info(`Recovered verify_each terminal state drift`, { runId: candidate.run_id });
+      advancePipeline(candidate.run_id);
+    }
   }
 }
 
@@ -1156,6 +1245,8 @@ export function advancePipeline(runId: string): { advanced: boolean; runComplete
   if (runStatus?.status === "failed" || runStatus?.status === "cancelled") {
     return { advanced: false, runCompleted: false };
   }
+
+  reconcileCompletedVerifyEachLoops(runId);
 
   const runningStep = db.prepare(
     "SELECT id FROM steps WHERE run_id = ? AND status = 'running' LIMIT 1"

@@ -2,7 +2,7 @@ import { beforeEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { getDb } from "../src/db.ts";
-import { claimStep, completeStep } from "../dist/installer/step-ops.js";
+import { advancePipeline, claimStep, completeStep } from "../dist/installer/step-ops.js";
 
 function seedVerifyEachRun() {
   const db = getDb();
@@ -128,5 +128,39 @@ describe('verify_each stale completion guards', () => {
       ['US-002', 'done'],
       ['US-003', 'pending'],
     ]);
+  });
+
+  it('reconciles a logically finished verify_each loop before advancing to final test', () => {
+    const db = getDb();
+    const { runId, implementId, verifyId, testId, storyRowId } = seedVerifyEachRun();
+    const now = new Date().toISOString();
+
+    db.prepare("UPDATE stories SET status = 'done', output = 'STATUS: done\nCHANGES: implemented facets', finished_at = ?, updated_at = ? WHERE id = ?")
+      .run(now, now, storyRowId);
+
+    db.prepare("UPDATE steps SET status = 'running', current_story_id = NULL, output = 'STATUS: done\nCHANGES: implemented facets', updated_at = ? WHERE id = ?")
+      .run(now, implementId);
+
+    db.prepare("UPDATE steps SET status = 'pending', updated_at = ? WHERE id = ?")
+      .run(now, verifyId);
+
+    db.prepare("UPDATE steps SET status = 'pending', updated_at = ? WHERE id = ?")
+      .run(now, testId);
+
+    const result = advancePipeline(runId);
+    assert.deepEqual(result, { advanced: false, runCompleted: false });
+
+    const implement = db.prepare('SELECT status, current_story_id, finished_at FROM steps WHERE id = ?').get(implementId) as { status: string; current_story_id: string | null; finished_at: string | null };
+    const verify = db.prepare('SELECT status, finished_at FROM steps WHERE id = ?').get(verifyId) as { status: string; finished_at: string | null };
+    const test = db.prepare('SELECT status FROM steps WHERE id = ?').get(testId) as { status: string };
+    const run = db.prepare('SELECT status FROM runs WHERE id = ?').get(runId) as { status: string };
+
+    assert.equal(implement.status, 'done');
+    assert.equal(implement.current_story_id, null);
+    assert.ok(implement.finished_at, 'implement loop should be sealed once all stories are done');
+    assert.equal(verify.status, 'done');
+    assert.ok(verify.finished_at, 'verify step should be sealed when downstream test is already pending');
+    assert.equal(test.status, 'pending', 'tester handoff should remain available');
+    assert.equal(run.status, 'running', 'run should stay active until test completes');
   });
 });
