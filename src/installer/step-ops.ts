@@ -214,10 +214,24 @@ function isStepInputReady(inputTemplate: string, context: Record<string, string>
 function promoteStepToPendingIfReady(stepId: string): boolean {
   const db = getDb();
   const step = db.prepare(
-    "SELECT id, run_id, input_template FROM steps WHERE id = ?"
-  ).get(stepId) as { id: string; run_id: string; input_template: string } | undefined;
+    "SELECT id, run_id, input_template, type, loop_config FROM steps WHERE id = ?"
+  ).get(stepId) as { id: string; run_id: string; input_template: string; type: string; loop_config: string | null } | undefined;
 
   if (!step) return false;
+
+  // Loop steps (for example implement over stories) receive story-specific vars such as
+  // current_story / completed_stories / progress only at claim time after a concrete story
+  // has been selected. They must not be blocked at promotion time on those placeholders.
+  if (step.type === "loop") {
+    const loopConfig: LoopConfig | null = step.loop_config ? JSON.parse(step.loop_config) : null;
+    if (loopConfig?.over === "stories" && runHasStories(step.run_id)) {
+      db.prepare(
+        "UPDATE steps SET status = 'pending', updated_at = datetime('now') WHERE id = ?"
+      ).run(step.id);
+      return true;
+    }
+    return false;
+  }
 
   const context = buildStepContext(step.run_id);
   if (!isStepInputReady(step.input_template, context)) {
